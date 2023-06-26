@@ -1,4 +1,16 @@
 {
-    "sdk": "MoveApps R SDK",
-    "year": 2006
+    "username": "andreakoelzsch",
+    "password": "Erik$Katerle44",
+    "study": 1790281684,
+    "animals": c("TaBG_B23_Y248_aF","TaBG_B27_Y284_aM"), #TaBG_B25_Y274_aM
+    "duplicates_handling": "first",
+    "thin": false,
+    "thin_numb": 6,
+    "thin_unit": "hour",
+    "minarg": false,
+    "incl_outliers": false,
+    "select_sensors": c(653),
+    "timestamp_start": null,
+    "timestamp_end": null,
+    "event_reduc": null
 }
