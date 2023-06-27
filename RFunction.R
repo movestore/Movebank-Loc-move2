@@ -8,7 +8,7 @@ library('lubridate')
 # one can use the function from the logger.R file:
 # logger.fatal(), logger.error(), logger.warn(), logger.info(), logger.debug(), logger.trace()
 
-rFunction = function(data=NULL, username,password,study,animals=NULL,select_sensors,incl_outliers=FALSE,minarg=FALSE,handle_duplicates=TRUE,timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL,thin=FALSE,thin_numb=6,thin_unit="hours", ...) {
+rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL, ...) {
   
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)
@@ -26,7 +26,7 @@ rFunction = function(data=NULL, username,password,study,animals=NULL,select_sens
   {
     logger.info("Either the selected study does not contain any location sensor data or you have deselected all available location sensors. No data will be downloaded (NULL output) by this App.")
     result <- NULL
-  } else #download only if sensor given
+  } else #download if any sensor given
   {
     arguments[["sensor_type_id"]] <- select_sensors
     
@@ -37,7 +37,7 @@ rFunction = function(data=NULL, username,password,study,animals=NULL,select_sens
     #include outliers
     if (incl_outliers==TRUE) 
     {
-      logger.info ("You have selected to download also locations marked as outliers in Movebank (visible=FALSE). Note that this may lead to unexpected results.")
+      logger.info ("Also locations marked as outliers in Movebank (visible=FALSE) will be downloaded. Note that this may lead to unexpected results.")
     } else 
     {
       arguments[["remove_movebank_outliers"]] <- TRUE
