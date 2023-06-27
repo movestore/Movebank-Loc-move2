@@ -1,6 +1,6 @@
 {
-    "username": MOVEBANK_USERNAME,
-    "password": MOVEBANK_PASSWORD,
+    "username": "secret",
+    "password": "secret",
     "study": 1790281684,
     "animals": ["TaBG_B23_Y248_aF","TaBG_B27_Y284_aM"],
     "duplicates_handling": "first",
