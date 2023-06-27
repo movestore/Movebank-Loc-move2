@@ -8,7 +8,7 @@ library('lubridate')
 # one can use the function from the logger.R file:
 # logger.fatal(), logger.error(), logger.warn(), logger.info(), logger.debug(), logger.trace()
 
-rFunction = function(data=NULL, username,password,config_version=NULL,study,animals=NULL,select_sensors,handle_duplicates=TRUE,timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL, ...) {
+rFunction = function(data=NULL, username,password,study,animals=NULL,select_sensors,incl_outliers=FALSE,minarg=FALSE,handle_duplicates=TRUE,timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL,thin=FALSE,thin_numb=6,thin_unit="hours", ...) {
   
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)
@@ -35,7 +35,7 @@ rFunction = function(data=NULL, username,password,config_version=NULL,study,anim
     logger.info(paste("You have selected to download locations of these selected sensor types:",paste(select_sensors_name,collapse=", ")))
     
     #include outliers
-    if (include_outliers==TRUE) 
+    if (incl_outliers==TRUE) 
     {
       logger.info ("You have selected to download also locations marked as outliers in Movebank (visible=FALSE). Note that this may lead to unexpected results.")
     } else 
