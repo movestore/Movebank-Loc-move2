@@ -77,7 +77,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #  arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
     #}
   
-    #todo: select animals - muessen wir mit Clemens aendern! --> animals==0 nicht erlaubt, dann nur else-Teil nötig
+    #todo: select animals - muessen wir mit Clemens aendern! --> animals==0 für alle tiere auch wenn in zukunft hinzugefuegt (make ticket, dass dies auch irgendwo geschrieben steht)
     if (length(animals)==0)
     {
       anims <- movebank_download_deployment(study)$individual_local_identifier #is that always available??
@@ -95,8 +95,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     # add fix for deployment_id -> code from Bart
     #locs$individual_tags
     # mt_set_track_id ...
-    # if minarg need deployment_id (possibly delete afterwards)
-    
+
     # quality check: cleaved, time ordered, non-emtpy, non-duplicated. update by mt_filter_unique 
     # Q: any other functions to cleave/order? --> Anne asking Bart
     
