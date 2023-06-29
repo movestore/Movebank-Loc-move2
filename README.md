@@ -7,7 +7,7 @@ Github repository: github.com/movestore/Movebank-Loc-move2
 ## Description
 Download movement tracks that are stored in a study on Movebank. From within the study, it is possible to select specific animals and sensor types, define a time range, and include outliers. You will also choose a method for handling duplicate records, and may downsample your data to a selected temporal resolution and core attributes only. (Tip: Add multiple Movebank Apps to the beginning of your workflow to download movement tracks from more than one Movebank study.) 
 
-## Documentation
+## Documentation (need to update for move2!)
 This App allows the direct download of animal movement data that are stored on [Movebank](www.movebank.org) for which you have access [permissions](https://www.movebank.org/cms/movebank-content/permissions-and-sharing). Those data can be the start of workflows that then filter, visualise and/or analyse them. You will view and select the data through an interactive interface.  
 
 **Step 1. Movebank Login.** Provide your Movebank account credentials, or select an account for which you have already provided credentials. Account information will be saved within MoveApps, however these credentials are *not* passed on when you share MoveApps workflows. Select "Next".
