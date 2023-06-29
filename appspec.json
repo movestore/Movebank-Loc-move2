@@ -1,25 +1,5 @@
 {
   "settings": [
-    {
-      "id": "sdk",
-      "name": "The name of the MoveApps SDK",
-      "description": "Showcase requesting a string input from the users of your app.",
-      "defaultValue": "MoveApps SDK",
-      "type": "STRING"
-    },
-    {
-      "id": "year",
-      "name": "The year",
-      "description": "Insert description for the year setting setting",
-      "defaultValue": 2022,
-      "type": "INTEGER"
-    },
-    {
-      "id": "yourLocalFileSettingId",
-      "name": "Personalization",
-      "description": "You can personalize the dashboard by providing a file named 'sample.txt'",
-      "type": "LOCAL_FILE"
-    }
   ],
   "dependencies": {
     "R": [
@@ -28,54 +8,68 @@
       },
       {
         "name": "move2"
+      },
+	  {
+        "name": "keyring"
       }
     ]
   },
-  "createsArtifacts": true,
-  "providedAppFiles": [
-    {
-      "settingId": "yourLocalFileSettingId",
-      "from": "data/local_app_files/provided-app-files/yourLocalFileSettingId/"
-    }
-  ],
   "license": {
     "key": "MIT"
   },
   "language": "eng",
-  "keywords": [
-    "example",
-    "template"
+   "keywords": [
+    "movebank",
+    "download",
+    "datasource",
+	"thinning"
   ],
   "people": [
-    {
-      "firstName": "Charles",
-      "middleInitials": null,
-      "lastName": "Darwin",
-      "email": "creator@example.com",
+  {
+      "firstName": "Andrea",
+	  "middleInitials": null,
+      "lastName": "Kölzsch",
+      "email": "akoelzsch@ab.mpg.de",
+      "roles": [
+		"author",
+        "contributor",
+        "reviewer"
+      ],
+      "orcid": "0000-0003-0193-1563",
+      "affiliation": "Max-Planck-Institute of Animal Behavior",
+	  "affiliationRor": "https://ror.org/026stee22"
+    },
+	{
+      "firstName": "Anne",
+      "middleInitials": "K",
+      "lastName": "Scharf",
+      "email": "ascharf@ab.mpg.de",
+      "roles": ["author"],
+      "orcid": null,
+      "affiliation": "Max-Planck-Institute of Animal Behavior",
+      "affiliationRor": "https://ror.org/026stee22"
+    },
+	    {
+      "firstName": "Julian",
+	  "middleInitials": null,
+      "lastName": "Hirt",
+      "email": "julian@couchbits.com",
       "roles": [
         "author",
         "creator"
       ],
-      "orcid": null,
-      "affiliation": null,
-      "affiliationRor": null
+      "affiliation": "couchbits GmbH"
     }
   ],
-  "funding": [
-    {
-      "name": "funder name",
-      "comment": "grant for App"
-    }
-  ],
-  "references": [
-    {
-      "type": "IsDescribedBy",
-      "note": "Darwin, C. 1900. The creation. Journal XY. 1-2",
-      "url": "https://anylink.xyz"
+  "reference": [
+	{
+    "type": "CommunicatesWith",
+    "note": "Movebank Data Base",
+    "url": "http://www.movebank.org"
     }
   ],
   "documentation": {
-    "url": "https://github.com/yourAccount/my-app/README.md"
+    "url": "https://github.com/movestore/Movebank-Loc-move2/blob/master/README.md"
   }
 }
 
