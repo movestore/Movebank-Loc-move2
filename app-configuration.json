@@ -1,15 +1,4 @@
 {
-    "username": "secret",
-    "password": "secret",
-    "study": 1790281684,
-    "select_sensors": [653],
-    "incl_outliers": false,
-    "minarg": false,
-    "animals": ["TaBG_B23_Y248_aF","TaBG_B27_Y284_aM"],
-    "thin": false,
-    "thin_numb": 6,
-    "thin_unit": "hour",
-    "timestamp_start": null,
-    "timestamp_end": null,
-    "event_reduc": null
+    "sdk": "MoveApps R SDK",
+    "year": 2006
 }
