@@ -2,14 +2,18 @@ library('move2')
 library('keyring')
 library('lubridate')
 
-## The parameter "data" is reserved for the data object passed on from the previous app
+# remains to update: 
 
-# to display messages to the user in the log file of the App in MoveApps
-# one can use the function from the logger.R file:
-# logger.fatal(), logger.error(), logger.warn(), logger.info(), logger.debug(), logger.trace()
+# 1. the setting duplicates handling shall give only either "first" or "last" (in second mt_filter_unique), now it is not used and set to "last" fix
 
-rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL, ...) {
-  
+# 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet
+
+# 3. add fix for deployment_id (to be named from indivdual_local_identifier and tag_local_identifier) - there should be some code from Bart
+
+# 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box)
+
+rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL,duplicates_handling="first",event_reduc=NULL, ...) {
+
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)
   
@@ -77,46 +81,64 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #  arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
     #}
   
-    #todo: select animals - muessen wir mit Clemens aendern! --> animals==0 für alle tiere auch wenn in zukunft hinzugefuegt (make ticket, dass dies auch irgendwo geschrieben steht)
     if (length(animals)==0)
     {
       anims <- movebank_download_deployment(study)$individual_local_identifier #is that always available??
       logger.info(paste("no animals set, using full study with the following all animals:",paste(as.character(anims),collapse=", ")))
+      # arguments[["individual_local_identifier"]] <- NULL
     } else
     {
       logger.info(paste("selected to download",length(animals), "animals:", paste(as.character(animals),collapse=", ")))
-      if (length(animals)==1) arguments[["individual_local_identifier"]] <- as.character(animals)
-      if (length(animals)>1) arguments[["individual_local_identifiers"]] <- as.character(animals)
+      arguments[["individual_local_identifier"]] <- as.character(animals)
     }
 
     #download
     locs <- do.call(movebank_download_study,arguments)
   
-    # add fix for deployment_id -> code from Bart
+    # add fix for deployment_id -> code from Bart, adapt
     #locs$individual_tags
     # mt_set_track_id ...
 
-    # quality check: cleaved, time ordered, non-emtpy, non-duplicated. update by mt_filter_unique 
-    # Q: any other functions to cleave/order? --> Anne asking Bart
+    # quality check: cleaved, time ordered, non-emtpy, non-duplicated
+    if(!mt_is_track_id_cleaved(locs))
+    {
+      logger.info("Your data set was not grouped by individual/track. We regroup it for you.")
+      locs <- locs |> dplyr::arrange(mt_track_id(locs))
+    }
     
-    # select only non-duplicated locs in two steps, no user interaction
-    # 1. select row with most info, test with stork data (fall download_modus in daten drin ist)
-    # 2. raussuchen: specific download_modus
-    # 3. first
-    #mt_filter_per_interval()
+    if (!mt_is_time_ordered(locs))
+    {
+      logger.info("Your data is not time ordered (within the individual/track groups). We reorder the locations for you.")
+      locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))
+    }
+    
+    if(!mt_has_no_empty_points(locs))
+    {
+      logger.info("Your data included empty points. We remove them for you.")
+      locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
+    }
 
-    #thinning
+    # remove duplicates without user interaction, start with select most-info row, then last (or first)
+    if (!mt_has_unique_location_time_records(locs))
+    {
+      n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
+      logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
+      locs <- mt_filter_unique(locs,criterion="subsets")
+      locs <- mt_filter_unique(locs,criterion="last")
+    }
+    
+    #thinning to first location of given intervals (thus, resulting time lag can be shorter some times)
     if (thin==TRUE) 
     {
       logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
-      locs <- locs[!duplicated(paste(mt_track_id(locs),round_date(mt_time(locs), paste0(thin_numb," ",thin_unit)))),]
+      locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
+      #locs <- locs[!duplicated(paste(mt_track_id(locs),round_date(mt_time(locs), paste0(thin_numb," ",thin_unit)))),]
     }
-    
     
     # combine with other input data (move2!)
     if (!is.null(data)) result <- mt_stack(data,locs,.track_combine="rename") else result <- locs
     # mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
   }
-  # provide my result to the next app in the MoveApps workflow
+
   return(result)
 }

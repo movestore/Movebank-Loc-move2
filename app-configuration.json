@@ -1,15 +1,16 @@
 {
     "username": "secret",
     "password": "secret",
-    "study": 1790281684,
+    "study": 		79206236,
     "select_sensors": [653],
     "incl_outliers": false,
     "minarg": false,
-    "animals": ["TaBG_B23_Y248_aF","TaBG_B27_Y284_aM"],
+    "animals": ["Oduella + / IAB PA339 (eobs 4563)","Giove + / IAB PA337 (eobs 4561)"],
     "thin": false,
     "thin_numb": 6,
     "thin_unit": "hour",
     "timestamp_start": null,
     "timestamp_end": null,
-    "event_reduc": null
-}
+    "config_version": 1,
+    "duplicates_handling": "first"
+    }
