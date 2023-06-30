@@ -6,9 +6,9 @@ library('lubridate')
 
 # 1. the setting duplicates handling shall give only either "first" or "last" (in second mt_filter_unique), now it is not used and set to "last" fix
 
-# 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet
+# 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
 
-# 3. add fix for deployment_id (to be named from indivdual_local_identifier and tag_local_identifier) - there should be some code from Bart
+# 3. add fix for deployment_id (to be named from indivdual_local_identifier and tag_local_identifier) - there should be some code from Bart --> fixed
 
 # 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box)
 
@@ -76,11 +76,23 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #event reduction profiles EURING: 1-quick daily location, 3-all location of the last 30 days
     #todo: test what happens if timestamp_start and timestamp_end are set,
     # note: this setting does not seem to work at all (with or without timestamp_start/end), please ask Bart
-    #if (!is.null(event_reduc))
-    #{
-    #  arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
-    #}
-  
+    # NOTE ANNE: "EURING_01" and "EURING_03" work, but the attributes have to be named, attributes="all" does  not work, nor timestamp start/end. 
+    
+    if (!is.null(event_reduc))
+    {
+      arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
+      if(!minarg){
+        if(length(select_sensors)==1){
+          arguments[["attributes"]] <- movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = select_sensors)$short_name
+        }
+        if(length(select_sensors)>1){
+          arguments[["attributes"]] <- unique(unlist(lapply(select_sensors, function(x){
+            movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = x)$short_name
+          })))
+        }
+      }  
+    }
+       
     if (length(animals)==0)
     {
       anims <- movebank_download_deployment(study)$individual_local_identifier #is that always available??
@@ -95,10 +107,6 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #download
     locs <- do.call(movebank_download_study,arguments)
   
-    # add fix for deployment_id -> code from Bart, adapt
-    #locs$individual_tags
-    # mt_set_track_id ...
-
     # quality check: cleaved, time ordered, non-emtpy, non-duplicated
     if(!mt_is_track_id_cleaved(locs))
     {
@@ -118,6 +126,15 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
     }
 
+    # rename track_id column to always combination of individual+tag so it is consistent and informative across studies. Used same naming as in "mt_read()"
+    # suggestion form Bart: maybe better use "animalName (dep_id:358594)" because it could happen that the same indiv gets tagged with the same tag in 2 different years. If using "indv_tag", tracks could get merged together that are actually different deployments
+    # ToDo: decide on column name e.g. "individual_name_deployment_id" and renaming e.g. "indivName (deploy_id:084728)"
+    locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ," (deploy_id:",mt_track_data(locs)$deployment_id,")")) # "deploy_id" or some other abbreviation that makes sense
+    idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
+    locs <- mt_as_event_attribute(locs,"individual_name_deployment_id") ## bug: this function turns the track data table into a data.frame. Bart is looking into it. But this should not cause any errors downstream.
+    locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+    locs <- mt_as_track_attribute(locs,idcolumn)
+  
     # remove duplicates without user interaction, start with select most-info row, then last (or first)
     if (!mt_has_unique_location_time_records(locs))
     {
@@ -139,6 +156,5 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if (!is.null(data)) result <- mt_stack(data,locs,.track_combine="rename") else result <- locs
     # mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
   }
-
   return(result)
 }
