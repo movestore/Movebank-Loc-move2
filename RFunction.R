@@ -81,6 +81,17 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if (!is.null(event_reduc))
     {
       arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
+      # ToDo: see if this "ignoring time settings" is needed or can be solved were else
+      if(!is.null(timestamp_start)){
+        arguments["timestamp_start"] <- NULL
+        logger.info(paste0("timestamp_start cannot be used in combination with the setting ",event_reduc))
+      }
+      if(!is.null(timestamp_end)){
+        arguments["timestamp_end"] <- NULL
+        logger.info(paste0("timestamp_end cannot be used in combination with the setting ",event_reduc))
+      }
+      
+      # attributes=all does not work, a vector is needed
       if(!minarg){
         if(length(select_sensors)==1){
           arguments[["attributes"]] <- movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = select_sensors)$short_name
