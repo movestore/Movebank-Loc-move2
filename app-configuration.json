@@ -12,5 +12,6 @@
     "timestamp_start": null,
     "timestamp_end": null,
     "config_version": 1,
-    "duplicates_handling": "first"
+    "duplicates_handling": "first",
+    "event_reduc": "EURING_03"
     }

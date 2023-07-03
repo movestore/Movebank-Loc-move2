@@ -152,7 +152,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
       logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
       locs <- mt_filter_unique(locs,criterion="subsets")
-      locs <- mt_filter_unique(locs,criterion="last")
+      locs <- mt_filter_unique(locs,criterion=duplicates_handling)
     }
     
     #thinning to first location of given intervals (thus, resulting time lag can be shorter some times)
