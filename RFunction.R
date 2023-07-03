@@ -4,13 +4,13 @@ library('lubridate')
 
 # remains to update: 
 
-# 1. the setting duplicates handling shall give only either "first" or "last" (in second mt_filter_unique), now it is not used and set to "last" fix
+# 1. the setting duplicates handling shall give only either "first" or "last" (in second mt_filter_unique), now it is not used and set to "last" fix --> activated
 
 # 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
 
 # 3. add fix for deployment_id (to be named from indivdual_local_identifier and tag_local_identifier) - there should be some code from Bart --> fixed
 
-# 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box)
+# 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box) --> made ticket
 
 rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL,duplicates_handling="first",event_reduc=NULL, ...) {
 
