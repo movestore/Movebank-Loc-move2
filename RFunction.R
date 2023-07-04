@@ -77,9 +77,11 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #todo: test what happens if timestamp_start and timestamp_end are set,
     # note: this setting does not seem to work at all (with or without timestamp_start/end), please ask Bart
     # NOTE ANNE: "EURING_01" and "EURING_03" work, but the attributes have to be named, attributes="all" does  not work, nor timestamp start/end. 
-    
-    if (!is.null(event_reduc))
+
+    if (!is.null(event_reduc) & length(event_reduc)>0)
     {
+      logger.info(paste("You have selected to use the event reduction profile",event_reduc,"for fast download from Movebank. EURING_01 indicates download of 1 location per day for the full selected tracks, EURING_03 download of the last 30 days of data for each selected individual track (starting at the last position)."))
+
       arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
       # ToDo: see if this "ignoring time settings" is needed or can be solved were else
       if(!is.null(timestamp_start)){
@@ -90,7 +92,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         arguments["timestamp_end"] <- NULL
         logger.info(paste0("timestamp_end cannot be used in combination with the setting ",event_reduc))
       }
-      
+
       # attributes=all does not work, a vector is needed
       if(!minarg){
         if(length(select_sensors)==1){
@@ -101,8 +103,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = x)$short_name
           })))
         }
-      }  
-    }
+      }
+    } else logger.info("You have selected to NOT use a fast reduction profile download. Start and end timestamps will be used if defined above.")
        
     if (length(animals)==0)
     {
@@ -153,6 +155,9 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
       locs <- mt_filter_unique(locs,criterion="subsets")
       locs <- mt_filter_unique(locs,criterion=duplicates_handling)
+      
+      logger.info(paste("Your data set contained",n_dupl,"duplicated locations."))
+      if (n_dupl>0) logger.info(paste("The duplicated locations were removed according to selection for most information if true subsets of the attributes or by selecting the",duplicates_handling,"location each (according to your selected setting)."))
     }
     
     #thinning to first location of given intervals (thus, resulting time lag can be shorter some times)
