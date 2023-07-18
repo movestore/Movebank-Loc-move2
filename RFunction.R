@@ -168,6 +168,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       #locs <- locs[!duplicated(paste(mt_track_id(locs),round_date(mt_time(locs), paste0(thin_numb," ",thin_unit)))),]
     }
     
+    #make names
+    names(locs) <- make.names(names(locs),allow_=TRUE)
+    mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
+    
     # combine with other input data (move2!)
     if (!is.null(data)) result <- mt_stack(data,locs,.track_combine="rename") else result <- locs
     # mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
