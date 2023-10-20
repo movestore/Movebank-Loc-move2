@@ -1,7 +1,7 @@
 {
     "username": "secret",
     "password": "secret",
-    "study": 		79206236,
+    "study": 79206236,
     "select_sensors": [653],
     "incl_outliers": false,
     "minarg": false,
@@ -13,4 +13,4 @@
     "timestamp_end": null,
     "config_version": 0,
     "event_reduc": {}
-    }
+}
