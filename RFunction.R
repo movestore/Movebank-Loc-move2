@@ -156,8 +156,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
       logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
       ## this piece of code keeps the duplicated entry with least number of columns with NA values
-      locs <- locs %>% rowwise() %>%
-        mutate(n_na = sum(is.na(cur_data()))) %>%
+      locs <- locs %>%
+        mutate(n_na = rowSums(is.na(pick(everything())))) %>%
         arrange(n_na) %>%
         mt_filter_unique(criterion='first') # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
     }
