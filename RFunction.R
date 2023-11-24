@@ -175,7 +175,14 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
     
     # combine with other input data (move2!)
-    if (!is.null(data)) result <- mt_stack(data,locs,.track_combine="rename") else result <- locs
+    if (!is.null(data)){
+      if(!st_crs(data)==st_crs(locs)){
+        locs <- st_transform(locs, st_crs(data))
+        logger.info(paste0("The new data sets to combine has a different projection. It has been re-projected, and now the combined data set is in the '",st_crs(data)$input,"' projection."))
+      }
+      result <- mt_stack(data,locs,.track_combine="rename")
+    }else{
+      result <- locs}
     # mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
   }
   return(result)
