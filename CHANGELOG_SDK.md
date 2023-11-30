@@ -1,5 +1,8 @@
 # Changelog SDK
 
+## 2023-11 `v3.0.4`
+
+- Upgrade `R` framework to `4.3.2`
 
 ## 2023-09 `v3.0.3`
 
