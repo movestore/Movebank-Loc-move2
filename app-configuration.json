@@ -1,16 +1,4 @@
 {
-    "username": "secret",
-    "password": "secret",
-    "study": 79206236,
-    "select_sensors": [653],
-    "incl_outliers": false,
-    "minarg": false,
-    "animals": ["Oduella + / IAB PA339 (eobs 4563)","Giove + / IAB PA337 (eobs 4561)"],
-    "thin": false,
-    "thin_numb": 6,
-    "thin_unit": "hour",
-    "timestamp_start": null,
-    "timestamp_end": null,
-    "config_version": 0,
-    "event_reduc": {}
+    "sdk": "MoveApps R SDK",
+    "year": 2004
 }
