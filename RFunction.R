@@ -2,6 +2,7 @@ library('move2')
 library('keyring')
 library('lubridate')
 library("dplyr")
+library("sf")
 
 # remains to update: 
 # 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
