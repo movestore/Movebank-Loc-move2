@@ -38,8 +38,7 @@ If you receive a message "No data are available for download", this may be becau
 
 ### Input data
 none or 
-location move2 object in Movebank format or
-moveStack in Movebank format
+location move2 object in Movebank format
 
 ### Output data
 location move2 object in Movebank format
