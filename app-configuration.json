@@ -1,16 +1,4 @@
 {
-    "username": "secret",
-    "password": "secret",
-    "study": 21231406,
-    "select_sensors": [653],
-    "incl_outliers": false,
-    "minarg": false,
-    "animals": ["Angela / DER AY470 (eobs 4001)", "Ella + / DER AU051 (eobs 3338)", "Kiki + / DER AN872 (eobs 3648)", "Nils + / DER AU058 (eobs 3335)", "Spiderwoman + / DER AU047 (eobs 3964)", "Ronja + / DER AU004 (eobs 3926)"],
-    "thin": true,
-    "thin_numb": 1,
-    "thin_unit": "hour",
-    "timestamp_start": null,
-    "timestamp_end": null,
-    "config_version": 0,
-    "event_reduc": {}
+    "sdk": "MoveApps R SDK",
+    "year": 2004
 }
