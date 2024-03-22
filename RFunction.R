@@ -159,17 +159,21 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       ## this piece of code keeps the duplicated entry with least number of columns with NA values
       locs <- locs %>%
         mutate(n_na = rowSums(is.na(pick(everything())))) %>%
-        arrange(mt_track_id(.), mt_time(.), n_na) %>%
+        arrange(n_na) %>%
         mt_filter_unique(criterion='first') # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
     }
     
     #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
+    # here was the error that tracks are not grouped
     if (thin==TRUE) 
     {
       logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
+      #order as suggested by error message (done by dplyr before, did not work???)
+      locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
       locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
       locs <- locs[-1,] ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it
-    } 
+    } else locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
+    # Dec2023: I add the simple ordering here again also in an else case, so that things definitely are ordered. Not sure why the dplyr way above does not seem to work
     
     #make names
     names(locs) <- make.names(names(locs),allow_=TRUE)
