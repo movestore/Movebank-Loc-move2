@@ -173,7 +173,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       #order as suggested by error message (done by dplyr before, did not work???)
       locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
       locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
-      locs <- locs[-1,] ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it
+      locs <- locs %>% group_by(mt_track_id()) %>% slice(-1) ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it
     } else locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
     # Dec2023: I add the simple ordering here again also in an else case, so that things definitely are ordered. Not sure why the dplyr way above does not seem to work
     
