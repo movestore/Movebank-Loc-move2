@@ -4,6 +4,8 @@ library('lubridate')
 library("dplyr")
 library("sf")
 
+## ToDo: find correct way of doing this: names(new1) <- make.names(names(new1),allow_=TRUE)
+
 # remains to update: 
 # 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
 
@@ -176,7 +178,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     # Dec2023: I add the simple ordering here again also in an else case, so that things definitely are ordered. Not sure why the dplyr way above does not seem to work
     
     #make names
-    names(locs) <- make.names(names(locs),allow_=TRUE)
+    # names(locs) <- make.names(names(locs),allow_=TRUE)
     mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
     
     # combine with other input data (move2!)
