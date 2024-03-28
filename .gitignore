@@ -5,4 +5,4 @@
 .DS_Store
 data/output/**
 !data/output/.keep
-akoelzsch.env
+tests/testthat/plot.png
