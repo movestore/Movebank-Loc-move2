@@ -9,8 +9,8 @@ library("sf")
 
 # 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box) --> made ticket
 
-rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL,event_reduc=NULL, ...) {
-
+rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid=c("indv","deploy","indv_deploy"), ...) {
+  
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)
   
@@ -51,7 +51,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       arguments[["attributes"]] <- c("tag_local_identifier","individual_local_identifier","deployment_id")
       logger.info("You have selected to only include the minimum set of event attributes: timestamp, track_id and the location. The track attributes will be fully included.")
     }
-  
+    
     if (exists("timestamp_start") && !is.null(timestamp_start)) {
       logger.info(paste0("timestamp_start is set and will be used: ", timestamp_start))
       arguments["timestamp_start"] = timestamp_start
@@ -70,15 +70,23 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       logger.info("timestamp_end not set.")
     }
     
+    if(!is.null(lastXdays)){
+      timestamp_start <- now(tzone="UTC") - days(lastXdays)
+      arguments["timestamp_start"] = timestamp_start ## why sometimes there are 2 square brackets and sometimes just one?
+      timestamp_end <- NULL
+      arguments["timestamp_end"] = timestamp_end
+      logger.info(paste0("data will be downloaded starting from: ", timestamp_start, " this is ",lastXdays, " before now. If timestamp_start or timestamp_end are set, these values will be ignored"))
+    }
+    
     #event reduction profiles EURING: 1-quick daily location, 3-all location of the last 30 days
     #todo: test what happens if timestamp_start and timestamp_end are set,
     # note: this setting does not seem to work at all (with or without timestamp_start/end), please ask Bart
     # NOTE ANNE: "EURING_01" and "EURING_03" work, but the attributes have to be named, attributes="all" does  not work, nor timestamp start/end. 
-
+    
     if (!is.null(event_reduc) & length(event_reduc)>0)
     {
       logger.info(paste("You have selected to use the event reduction profile",event_reduc,"for fast download from Movebank. EURING_01 indicates download of 1 location per day for the full selected tracks, EURING_03 download of the last 30 days of data for each selected individual track (starting at the last position)."))
-
+      
       arguments[["event_reduction_profile"]] <- event_reduc #can have values "EURING_01" or "EURING_03"
       # ToDo: see if this "ignoring time settings" is needed or can be solved were else
       if(!is.null(timestamp_start)){
@@ -89,7 +97,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         arguments["timestamp_end"] <- NULL
         logger.info(paste0("timestamp_end cannot be used in combination with the setting ",event_reduc))
       }
-
+      
       # attributes=all does not work, a vector is needed
       if(!minarg){
         if(length(select_sensors)==1){
@@ -102,7 +110,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         }
       }
     } else logger.info("You have selected to NOT use a fast reduction profile download. Start and end timestamps will be used if defined above.")
-       
+    
     if (length(animals)==0)
     {
       anims <- movebank_download_deployment(study)$individual_local_identifier #is that always available??
@@ -113,10 +121,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       logger.info(paste("selected to download",length(animals), "animals:", paste(as.character(animals),collapse=", ")))
       arguments[["individual_local_identifier"]] <- as.character(animals)
     }
-
+    
     #download
     locs <- do.call(movebank_download_study,arguments)
-  
+    
     # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
     if(!mt_is_track_id_cleaved(locs))
     {
@@ -142,15 +150,33 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       locs <- locs[-rem,]
     }
     
-    # rename track_id column to always combination of individual+tag so it is consistent and informative across studies. Used same naming as in "mt_read()"
-    # suggestion form Bart: maybe better use "animalName (dep_id:358594)" because it could happen that the same indiv gets tagged with the same tag in 2 different years. If using "indv_tag", tracks could get merged together that are actually different deployments
-    # ToDo: decide on column name e.g. "individual_name_deployment_id" and renaming e.g. "indivName (deploy_id:084728)"
-    locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ," (deploy_id:",mt_track_data(locs)$deployment_id,")")) # "deploy_id" or some other abbreviation that makes sense
-    idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
-    locs <- mt_as_event_attribute(locs,"individual_name_deployment_id")
-    locs <- mt_set_track_id(locs, "individual_name_deployment_id")
-    locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
-  
+    
+    # ## AFTER DISCUSSING WITH SARAH AND OTHERS, WE HAVE DECIDED TO LET THE USER DECIDE WHICH SHOULD BE THEIR TRACK ID, INDIVIDUAL NAME, DEPLOYMENT ID, OR COMBI OF BOTH.
+    # # rename track_id column to always combination of individual+tag so it is consistent and informative across studies. Used same naming as in "mt_read()"
+    # # suggestion form Bart: maybe better use "animalName (dep_id:358594)" because it could happen that the same indiv gets tagged with the same tag in 2 different years. If using "indv_tag", tracks could get merged together that are actually different deployments
+    # # ToDo: decide on column name e.g. "individual_name_deployment_id" and renaming e.g. "indivName (deploy_id:084728)"
+    # locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ," (deploy_id:",mt_track_data(locs)$deployment_id,")")) # "deploy_id" or some other abbreviation that makes sense
+    # idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
+    # locs <- mt_as_event_attribute(locs,"individual_name_deployment_id")
+    # locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+    # locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+    
+    # trackid=c("indv","deploy","indv_deploy")
+    if(trackid=="indv"){ #  "individual_local_identifier"
+      if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
+        locs <- mt_set_track_id(locs, "individual_local_identifier")
+      }
+    }
+    if(trackid=="deploy"){ #deployment_id
+      if(mt_track_id_column(locs)=="deployment_id"){locs <- locs}else{
+        locs <- mt_set_track_id(locs, "deployment_id")
+      }
+    }
+    if(trackid=="indv_deploy"){
+      locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id,")"))
+      locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+    }
+    
     # remove duplicates without user interaction, start with select most-info row
     if (!mt_has_unique_location_time_records(locs))
     {
