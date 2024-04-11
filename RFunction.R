@@ -72,9 +72,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     
     if(!is.null(lastXdays)){
       timestamp_start <- now(tzone="UTC") - days(lastXdays)
-      arguments["timestamp_start"] = timestamp_start ## why sometimes there are 2 square brackets and sometimes just one?
-      timestamp_end <- NULL
-      arguments["timestamp_end"] = timestamp_end
+      arguments[["timestamp_start"]]  <-  timestamp_start ## why sometimes there are 2 square brackets and sometimes just one?
+      arguments["timestamp_end"]  <-  NULL
       logger.info(paste0("data will be downloaded starting from: ", timestamp_start, " this is ",lastXdays, " before now. If timestamp_start or timestamp_end are set, these values will be ignored"))
     }
     
@@ -165,16 +164,21 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if(trackid=="indv"){ #  "individual_local_identifier"
       if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
         locs <- mt_set_track_id(locs, "individual_local_identifier")
+        # "deployment_id" moves to the event table, probably could somehow get it back to the track table, but not sure its worth the effort
       }
     }
     if(trackid=="deploy"){ #deployment_id
       if(mt_track_id_column(locs)=="deployment_id"){locs <- locs}else{
+        idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
         locs <- mt_set_track_id(locs, "deployment_id")
+        locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
       }
     }
     if(trackid=="indv_deploy"){
-      locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id,")"))
+      idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
+      locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id))
       locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+      locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
     }
     
     # remove duplicates without user interaction, start with select most-info row
