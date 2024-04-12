@@ -9,7 +9,7 @@ library("sf")
 
 # 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box) --> made ticket
 
-rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid=c("indv","deploy","indv_deploy"), ...) {
+rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid="indv_deploy", ...) {
   
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)

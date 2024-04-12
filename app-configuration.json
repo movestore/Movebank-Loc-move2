@@ -12,5 +12,7 @@
     "timestamp_start": null,
     "timestamp_end": null,
     "config_version": 0,
-    "event_reduc": {}
+    "event_reduc": {},
+    "lastXdays" : null,
+     "trackid" : "indv"
 }
