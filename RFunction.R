@@ -9,7 +9,7 @@ library("sf")
 
 # 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box) --> made ticket
 
-rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid="indv_deploy", ...) {
+rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid="indv", ...) {
   
   options("keyring_backend"="env")
   movebank_store_credentials(username,password)
@@ -48,7 +48,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     #todo: try out with study that has not tag_loc_id or id_loc_id
     if (minarg==TRUE) 
     {
-      arguments[["attributes"]] <- c("tag_local_identifier","individual_local_identifier","deployment_id")
+      arguments[["attributes"]] <- c("tag_local_identifier","individual_local_identifier","deployment_id","sensor_type_id")
       logger.info("You have selected to only include the minimum set of event attributes: timestamp, track_id and the location. The track attributes will be fully included.")
     }
     
