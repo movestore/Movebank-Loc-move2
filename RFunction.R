@@ -198,7 +198,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     {
       logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
       locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
-      locs <- locs[-1,] ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it
+      locs <- locs %>% group_by(mt_track_id()) %>% slice(if(n()>1) -1 else 1) %>% ungroup ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it. If track endsup only with one location, this one is retained
+      locs <-  locs %>% select (-c(`mt_track_id()`)) # this column gets added when using group_by()
     } 
     
     #make names
