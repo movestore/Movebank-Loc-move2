@@ -8,7 +8,7 @@
     "animals": ["Prinzesschen"],
     "thin": true,
     "thin_numb": 1,
-    "thin_unit": "hour",
+    "thin_unit": "week",
     "timestamp_start": null,
     "timestamp_end": null,
     "config_version": 0,

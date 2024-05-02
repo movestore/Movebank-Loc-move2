@@ -4,6 +4,8 @@ library('lubridate')
 library("dplyr")
 library("sf")
 
+## ToDo: find correct way of doing this: names(new1) <- make.names(names(new1),allow_=TRUE)
+
 # remains to update: 
 # 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
 
@@ -189,21 +191,24 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       ## this piece of code keeps the duplicated entry with least number of columns with NA values
       locs <- locs %>%
         mutate(n_na = rowSums(is.na(pick(everything())))) %>%
-        arrange(mt_track_id(.), mt_time(.), n_na) %>%
+        arrange(n_na) %>%
         mt_filter_unique(criterion='first') # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
     }
     
     #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
+    # here was the error that tracks are not grouped
     if (thin==TRUE) 
     {
       logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
+      #order as suggested by error message (done by dplyr before, did not work???)
+      locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
       locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
       locs <- locs %>% group_by(mt_track_id()) %>% slice(if(n()>1) -1 else 1) %>% ungroup ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it. If track endsup only with one location, this one is retained
       locs <-  locs %>% select (-c(`mt_track_id()`)) # this column gets added when using group_by()
     } 
     
     #make names
-    names(locs) <- make.names(names(locs),allow_=TRUE)
+    # names(locs) <- make.names(names(locs),allow_=TRUE)
     mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
     
     # combine with other input data (move2!)
