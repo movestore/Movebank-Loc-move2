@@ -1,16 +1,18 @@
 {
     "username": "secret",
     "password": "secret",
-    "study": 103394406,
-    "select_sensors": [653],
+    "study": 1898591,
+    "select_sensors": [82798],
     "incl_outliers": false,
     "minarg": false,
-    "animals": ["A116514", "A234556", "A234559", "A234560", "A234561", "A234562", "A33506"],
+    "animals": ["Prinzesschen"],
     "thin": true,
     "thin_numb": 1,
     "thin_unit": "week",
     "timestamp_start": null,
     "timestamp_end": null,
     "config_version": 0,
-    "event_reduc": {}
+    "event_reduc": {},
+    "lastXdays" : null,
+     "trackid" : "deploy"
 }
