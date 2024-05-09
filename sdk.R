@@ -12,11 +12,6 @@ clearRecentOutput()
 # the app run. Per default the file `/app-configuration.json` will be parsed.
 args <- configuration()
 
-# override app-configuration w/ personal tokens
-load_dot_env(file='akoelzsch.env')
-args[["username"]] = Sys.getenv("MOVEBANK_USERNAME")
-args[["password"]] = Sys.getenv("MOVEBANK_PASSWORD")
-
 # Lets simulate running your app on MoveApps
 source("src/moveapps.R")
 simulateMoveAppsRun(args)
