@@ -192,7 +192,9 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       locs <- locs %>%
         mutate(n_na = rowSums(is.na(pick(everything())))) %>%
         arrange(n_na) %>%
-        mt_filter_unique(criterion='first') # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
+        mt_filter_unique(criterion='first') %>% # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
+        dplyr::arrange(mt_track_id()) %>%
+        dplyr::arrange(mt_track_id(),mt_time())
     }
     
     #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
