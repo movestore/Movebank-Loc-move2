@@ -17,9 +17,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
 
   time0 <- Sys.time()
   
-  while(Sys.time() < (time0+300) & !(exists("locs"))) #try for 5 min or until it works (i.e. locs is created)
+  while(Sys.time() < (time0+1800) & !(exists("locs"))) #try for 30 min or until it works (i.e. locs is created)
   {
-    if (Sys.time()>time0+2) Sys.sleep(10) #only try every 10 seconds
+    if (Sys.time()>time0+2 & Sys.time()<=time0+600) Sys.sleep(60) #after 2 sec only try every 1 minute
+    if (Sys.time()>time0+600) Sys.sleep(300) #after 10 min only try every 5 minutes
     logger.info(paste("Try Movebank access at:", Sys.time()))
     try( 
       expr = {
