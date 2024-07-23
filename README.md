@@ -55,6 +55,8 @@ none
 ### Most common errors
 Please always check the overview in step 5.
 
+Beware that changes of Animal names in your Movebank study will lead to errors in scheduled runs that include data download from Movebank. For solving this issue, go back to the Movebank App settings and reselect the correct Animals.
+
 ### Null or error handling
 **Data:** If one or more Animals are selected but without data meeting the other selection criteria, then they are omitted from the return dataset with a warning only. However, if all selected Animals have no data to download then NULL is returned, leading to an error.
 
