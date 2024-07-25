@@ -1,4 +1,19 @@
 {
-    "sdk": "MoveApps R SDK",
-    "year": 2014
+ "username": "secret",
+    "password": "secret",
+    "study": 1898591,
+    "select_sensors": [82798],
+    "incl_outliers": false,
+    "minarg": false,
+    "animals": ["Prinzesschen"],
+    "thin": true,
+    "thin_numb": 1,
+    "thin_unit": "week",
+    "timestamp_start": null,
+    "timestamp_end": null,
+    "config_version": 0,
+    "event_reduc": {},
+    "lastXdays" : null,
+     "trackid" : "deploy"
+}
 }
