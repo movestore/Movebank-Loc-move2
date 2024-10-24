@@ -13,7 +13,7 @@ clearRecentOutput()
 args <- configuration()
 
 # override app-configuration w/ personal tokens
-load_dot_env(file='akoelzsch.env')
+load_dot_env(file='ascharf.env')
 args[["username"]] = Sys.getenv("MOVEBANK_USERNAME")
 args[["password"]] = Sys.getenv("MOVEBANK_PASSWORD")
 

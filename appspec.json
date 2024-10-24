@@ -17,6 +17,18 @@
       },
 	  {
         "name": "dplyr"
+      },
+	  {
+        "name": "xml2"
+      },
+      {
+        "name": "purrr"
+      },
+      {
+        "name": "vctrs"
+      },
+      {
+        "name": "rlang"
       }
     ]
   },
