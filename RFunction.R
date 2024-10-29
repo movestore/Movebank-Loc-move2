@@ -276,7 +276,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
   if(!exists("result"))
   {
     result <- NULL
-    logger.info(paste("Have tried to access Movebank for 5 minutes, no successful response. Returning NULL. Original error:", geterrmessage()))
+    logger.info(paste("Tried to access Movebank for 30 minutes, no successful response. Movebank seems to be currently down. Try again later. Returning NULL. Original error:", geterrmessage()))
   }
   
   return(result)
