@@ -181,6 +181,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           # locs <- mt_set_track_id(locs, "individual_name_deployment_id")
           # locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
           
+          locs <- locs %>% mutate_track_data(deployment_id = as.factor(deployment_id)) ## FIX UNTIL NEW RELESE OF MOVE2 (now 0.4.1)
+          
           # trackid=c("indv","deploy","indv_deploy")
           if(trackid=="indv"){ #  "individual_local_identifier"
             if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
