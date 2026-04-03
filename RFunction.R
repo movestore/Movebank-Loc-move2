@@ -9,12 +9,6 @@ library("vctrs")
 library("rlang")
 
 
-############## 4.9.24
-## Adjustements in Movebank Location App UI:
-# - argument "thin_unit": aseconds, aminutes and ahours #26 -- gives error in logs, but "error" does not show
-# - make "Animal" default in track ID #35
-############
-
 ## ToDo: find correct way of doing this: names(new1) <- make.names(names(new1),allow_=TRUE)
 
 # remains to update: 
@@ -186,6 +180,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
               locs <- mt_set_track_id(locs, "individual_local_identifier")
               # "deployment_id" moves to the event table, probably could somehow get it back to the track table, but not sure its worth the effort
+              if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
             }
           }
           if(trackid=="deploy"){ #deployment_id
@@ -193,6 +188,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
               locs <- mt_set_track_id(locs, "deployment_id")
               locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+              if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
             }
           }
           if(trackid=="indv_deploy"){
@@ -200,6 +196,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id))
             locs <- mt_set_track_id(locs, "individual_name_deployment_id")
             locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+            if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
           }
           
           # remove duplicates without user interaction, start with select most-info row
