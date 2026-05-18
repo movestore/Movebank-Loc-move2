@@ -5,14 +5,14 @@ MoveApps
 Github repository: github.com/movestore/Movebank-Loc-move2
 
 ## Description
-Download movement tracks that are stored in a study on Movebank. From within the study, it is possible to select specific animals and sensor types, define a time range, and include outliers. You may also downsample your data to a selected temporal resolution and core attributes only. Records with the same track ID and timestamp can cause errors, for example by requiring an animal to be in two places at the same time, and therefore are not allowed. If present in the data set, the duplicated timestamp entry with least columns containing NAs is retained. (Tip: Add multiple Movebank Apps to the beginning of your workflow to download movement tracks from more than one Movebank study.) 
+Download movement tracks that are stored in a study on Movebank. From within the study, it is possible to select specific animals and sensor types, define a time range, and include outliers. You may also downsample your data to a selected temporal resolution and core attributes only. Records with the same track ID and timestamp can cause errors, for example by requiring an animal to be in two places at the same time, and therefore are not allowed. If present in the data set, the duplicated timestamp entry with least columns containing NAs is retained. Attributes containing only NAs, ie empty will be removed from the data set. (Tip: Add multiple Movebank Apps to the beginning of your workflow to download movement tracks from more than one Movebank study.) 
 
-## Documentation (need to update for move2!)
+## Documentation
 This App allows the direct download of animal movement data that are stored on [Movebank](www.movebank.org) for which you have access [permissions](https://www.movebank.org/cms/movebank-content/permissions-and-sharing). Those data can be the start of workflows that then filter, visualise and/or analyse them. You will view and select the data through an interactive interface.  
 
 **Step 1. Movebank Login.** Provide your Movebank account credentials, or select an account for which you have already provided credentials. Account information will be saved within MoveApps, however these credentials are *not* passed on when you share MoveApps workflows. Select "Next".
 
-**Step 2. Studies.** Here you will see a list of summary information for studies in Movebank. By default, the list is filtered to studies for which the account selected in Step 1 has download access. You may also filter the list to only those studies for which you are a Collaborator or Data Manager. Also, only studies that contain location data are selected by default. For each study, the number of animals, the number of locations (events), sensor types, and the date of the first and most recent location are provided. Choose a study and select "Next". 
+**Step 2. Studies.** Here you will see a list of summary information for studies in Movebank. By default, the list is filtered to studies for which the account selected in Step 1 has download access. You may also filter the list to only those studies for which you are a Collaborator or Data Manager, or only open access studies. Also, only studies that contain location data are selected by default. For each study, the number of animals, the number of locations (events), sensor types, license, and the date of the first and most recent location are provided. Choose a study and select "Next". 
 
 In some cases, you will be asked to read and agree to a license agreement set by the data owner before proceeding.
 
@@ -20,7 +20,7 @@ If you uncheck "I have download access", you may discover studies of interest fo
 
 If you receive a message "No data are available for download", this may be because you do not have access, because there are no data in the study, or because the data in the study have not been associated with animals. If you are a Data Manager for the study, you can [add data](https://www.movebank.org/cms/movebank-content/add-data) or [deployments](https://www.movebank.org/cms/movebank-content/upload-qc#add_deployments) for the study in Movebank. Contact support@movebank.org for assistance.  
 
-**Step 3. Animals.** Here you will see a list of summary information for animals in the study. By default no animals are selected. Animals can be selected and deselected from the list. Click on the "-" above to select all animals. For help evaluating available data, the animal name and nickname, species, ring ID, number of locations (events), number of deployments, sensor types, and the date of the first and most recent location are provided for each animal. Confirm your choices and select "Next". At least one animal has to be selected.
+**Step 3. Animals.** Here you will see a list of summary information for animals in the study. By default no animals are selected. Animals can be selected and deselected from the list. Click on the "-" above to select all animals. You can sort the animals or seach for them in the seach field. For help evaluating available data, the animal name and nickname, species, ring ID, number of locations (events), number of deployments, sensor types, and the date of the first and most recent location are provided for each animal. Confirm your choices and select "Next". At least one animal has to be selected.
 
 **Step 4. Options.** Here you have additional options to choose which data for the selected study and animal/s will be accessed. 
 * *Start and End Date (optional)*: Define a start and/or end timestamp if you want to restrict access to a specific time range.
@@ -30,7 +30,7 @@ If you receive a message "No data are available for download", this may be becau
 * *Argument Minimisation (optional)*: To reduce dataset size, you can choose to restrict data access to a minimum number of core data attributes: animal ID, timestamp, latitude, longitude, species, sensor type, and visible ([visible](http://vocab.nerc.ac.uk/collection/MVB/current/MVB000209/)=false indicates outliers). Consider whether you will need additional information from the dataset for subsequent steps of your analysis.
 * *Include Outliers (optional)*: You can select to include records flagged as outliers in Movebank. We strongly recommend that you leave this unchecked. Only select it when you are familiar with the data, for example, if you want to ignore filtering steps taken in Movebank to apply your own filtering methods in subsequent steps of your workflow. We recommend flagging outliers in Movebank ([see instructions](https://www.movebank.org/cms/movebank-content/deployments-and-outliers#mark_outliers)), where options are available to review data and flag records manually or using filters.
 * *Download most recent data (optional)*: Option to select download of data of a certain number of days before NOW. This option only makes sense for data with life feed into Movebank. If this option is chosen, “start date” and “end date” will be ignored.
-* *Fast data reduction profiles (optional)*: Movebank provides fast, reduced data download options that you can select to use here. By default they are deselected. It is possible to select (a) download of the full track in resolution of 1 location per day or (b) download of the complete tracks of the last 30 days. Note that selected Start and End Dates will be overwritten by this option.
+* *Fast data reduction profiles (optional)*: Movebank provides fast, reduced data download options that you can select to use here. By default they are deselected. It is possible to select (a) download of the full track in resolution of 1 location per day or (b) download of the complete tracks of the last 30 days (last 30 days of the track, independently of when they ended). Note that selected Start and End Dates will be overwritten by this option.
 
 **Step 5. Overview.** Here you are provided with a summary of all selections from steps 1-4. Review your selections. To make changes, select "Back", or select "Finish" to confirm and proceed. This summary is also helpful to remind you of your selections later: select the "i" button of this App and then "Settings" to see this overview or make changes at any time.
 
@@ -48,7 +48,7 @@ move2_loc
 move2_loc
 
 ### Artefacts
-none
+`citation_metadata.csv`: table containing the information of the study name, contact person, license type and terms, date of download
 
 ### Settings 
 none

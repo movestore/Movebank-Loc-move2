@@ -7,7 +7,9 @@ library("xml2")
 library("purrr")
 library("vctrs")
 library("rlang")
+library("tidyselect")
 
+## resolves #34, 
 
 ## ToDo: find correct way of doing this: names(new1) <- make.names(names(new1),allow_=TRUE)
 
@@ -136,6 +138,19 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             arguments[["individual_local_identifier"]] <- as.character(animals)
           }
           
+          ## not working because of the while loop. Need to have better look at this
+          # ##check timestamp end and start to be within range of data
+          # stdyi <- movebank_download_study_info(study_id=study)
+          # if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
+          #     result <- NULL
+          #     logger.warn(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
+          # } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
+          #   result <- NULL
+          #     logger.warn(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
+          # 
+          #     }
+          # else{
+
           #download
           locs <- do.call(movebank_download_study,arguments)
           
@@ -154,7 +169,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           
           if(!mt_has_no_empty_points(locs))
           {
-            logger.info("Your data included empty points. We remove them for you.")
+            emptylocs <- dplyr::filter(locs, sf::st_is_empty(locs))
+            logger.info(paste0("Your data included empty points (",nrow(emptylocs),"). We remove them for you."))
             locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
           }
           ## for some reason, sometimes either lat or long are NA, as one still has a value it does not get removed with the excluding empty, here is what I came up with:
@@ -228,7 +244,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           #make names
           # names(locs) <- make.names(names(locs),allow_=TRUE)
           mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
-          
+         
           # combine with other input data (move2!)
           if (!is.null(data)){
             if (!st_crs(data)==st_crs(locs)){
@@ -265,8 +281,30 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
                 ~unlist(purrr::map(.x, paste, collapse=","))))
             }
           }
-      }
         }
+          
+          ## remove all attributes that contain NAs in all rows
+          na_cols <- result %>%
+            select(where(~ all(is.na(.)))) %>% 
+            select_track_data(where(~ all(is.na(.))))
+          naevnt <- names(na_cols)
+          natrk <- names(mt_track_data(na_cols))
+          naevnt <- naevnt[!naevnt %in% c(mt_track_id_column(result), mt_time_column(result),"geometry")]
+          natrk <- natrk[!natrk %in% c(mt_track_id_column(result))]
+          
+          if(length(naevnt)>=1){
+            logger.info(paste0("The event attributes: ",paste0(naevnt, collapse = ", ")," have been removed as they only contained NAs.")) 
+          }
+          if(length(natrk)>=1){
+            logger.info(paste0("The track attributes: ",paste0(natrk, collapse = ", ")," have been removed as they only contained NAs.")) 
+          }
+          
+          result <- result %>%
+            select(where(~ !all(is.na(.)))) %>% 
+            select_track_data(where(~ !all(is.na(.))))
+          
+          }
+        # }
           },silent=TRUE)
   }
   
@@ -274,6 +312,17 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
   {
     result <- NULL
     logger.info(paste("Tried to access Movebank for 30 minutes, no successful response. Movebank seems to be currently down. Try again later. Returning NULL. Original error:", geterrmessage()))
+  }
+  
+  if(!is.null(result)){
+  ## create file with metadata for download
+  attrList <- c("study_id", "name", "taxon_ids", "principal_investigator_name", "contact_person_name", "citation", "license_terms", "license_type")
+  metadata <- result %>% mt_track_data() %>% select(any_of(attrList)) %>% distinct(.keep_all = TRUE)
+  metadata$download_date <- Sys.Date()
+  metadata_csv <- data.frame(names(metadata),t(metadata))
+  if(nrow(metadata)>=1){
+  write.table(metadata_csv,appArtifactPath("citation_metadata.csv"), row.names = F, col.names=F)
+  }
   }
   
   return(result)
