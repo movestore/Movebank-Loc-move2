@@ -9,32 +9,79 @@ library("vctrs")
 library("rlang")
 library("tidyselect")
 
-## resolves #34, 
 
 ## ToDo: find correct way of doing this: names(new1) <- make.names(names(new1),allow_=TRUE)
 
-# remains to update: 
-# 2. EURING_1 und EURING_3 options shall be added, but as they dont work and the frontend does not allow it for selection, not yet --> probably temporary bug, now it works
 
-# 4. select animals - should be changed with Clemens: animals==0 for all animals also in future added ones (make ticket that this info shall be written somewhere or additinal check-box) --> made ticket
+### helper function for while loop to pull data from movebank
+
+retry_with_backoff <- function(expr,
+                               check_var = NULL,       # optional: name (string) of variable whose existence signals success
+                               timeout = 1800,          # total time to keep trying (seconds)
+                               label = "Movebank",      # human-readable name for log messages, e.g. "Movebank"
+                               initial_wait = 2,        # seconds before backoff kicks in at all
+                               short_backoff = 600,     # seconds after which backoff switches to long interval
+                               short_sleep = 60,        # sleep interval during short backoff phase
+                               long_sleep = 300,        # sleep interval during long backoff phase
+                               envir = parent.frame()) {
+  
+  expr <- substitute(expr)
+  time0 <- Sys.time()
+  elapsed <- 0
+  succeeded <- FALSE
+  last_error <- NULL
+  
+  is_success <- function() {
+    if (!is.null(check_var)) exists(check_var, envir = envir, inherits = FALSE) else succeeded
+  }
+  
+  while (elapsed < timeout & !is_success()) {
+    
+    # backoff schedule based on elapsed time
+    if (elapsed > initial_wait & elapsed <= short_backoff) Sys.sleep(short_sleep)
+    if (elapsed > short_backoff) Sys.sleep(long_sleep)
+    
+    logger.info(paste0("Try ", label, " access at: ", Sys.time()))
+    
+    tryCatch({
+      eval(expr, envir = envir)
+      succeeded <- TRUE   # only reached if eval() didn't error
+    }, error = function(e) {
+      last_error <<- conditionMessage(e)
+    })
+    
+    elapsed <- as.numeric(difftime(Sys.time(), time0, units = "secs"))
+  }
+  
+  if (!is_success()) {
+    error_msg <- paste0(
+      "Tried to access ", label, " for ", timeout / 60, " minutes, no successful response. ",
+      label, " seems to be currently down. Try again later. ",
+      "Original error: ", if (!is.null(last_error)) last_error else geterrmessage()
+    )
+    logger.error(error_msg)
+    stop(error_msg, call. = FALSE)
+  }
+  
+  if (!is.null(check_var)) return(get(check_var, envir = envir, inherits = FALSE))
+  invisible(TRUE)  # side-effect-only call succeeded; nothing meaningful to return
+}
+
 
 rFunction = function(data=NULL, username,password,study,select_sensors,incl_outliers=FALSE,minarg=FALSE,animals=NULL,thin=FALSE,thin_numb=6,thin_unit="hours",timestamp_start=NULL,timestamp_end=NULL, event_reduc=NULL, lastXdays=NULL, trackid="indv", ...) {
   
   options("keyring_backend"="env")
   
-  time0 <- Sys.time()
-  
-  while(Sys.time() < (time0+1800) & !(exists("locs"))) #try for 30 min or until it works (i.e. locs is created)
-  {
-    if (Sys.time()>time0+2 & Sys.time()<=time0+600) Sys.sleep(60) #after 2 sec only try every 1 minute
-    if (Sys.time()>time0+600) Sys.sleep(300) #after 10 min only try every 5 minutes
-    logger.info(paste("Try Movebank access at:", Sys.time()))
-    try( 
-      expr = {
+  tryCatch(
+    retry_with_backoff({
         movebank_store_credentials(username,password)
-        arguments <- list()
-        arguments[["study_id"]] <- study
-        
+    }, #label = "Movebank credential storage"
+    ),
+    error = function(e) {message("Failed to access Movebank: ", conditionMessage(e))}
+  )    
+  
+  arguments <- list()
+  arguments[["study_id"]] <- study
         #sensor types
         if (is.null(select_sensors))
         {
@@ -48,7 +95,17 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         {
           arguments[["sensor_type_id"]] <- select_sensors
           
+          sensorInfo <- tryCatch(
+            retry_with_backoff({
           sensorInfo <- movebank_retrieve(entity_type="tag_type")
+            }, check_var = "sensorInfo"#, label = "Movebank"
+          ),
+          error = function(e) {
+            message("Failed to to access Movebank: ", conditionMessage(e))
+            NULL
+          }
+          )
+          
           select_sensors_name <- sensorInfo$name[which(as.numeric(sensorInfo$id) %in% select_sensors)]
           logger.info(paste("You have selected to download locations of these selected sensor types:",paste(select_sensors_name,collapse=", ")))
           
@@ -117,21 +174,38 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             # attributes=all does not work, a vector is needed
             if(!minarg){
               if(length(select_sensors)==1){
-                arguments[["attributes"]] <- movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = select_sensors)$short_name
+                attr_sdy <- tryCatch(
+                  retry_with_backoff({
+                attr_sdy <- movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = select_sensors)$short_name
+                  }, check_var = "attr_sdy"),
+                error = function(e) {
+                  message("Failed to access Movebank: ", conditionMessage(e))
+                  NULL
+                }
+                )
+                
+                arguments[["attributes"]] <- attr_sdy
               }
               if(length(select_sensors)>1){
-                arguments[["attributes"]] <- unique(unlist(lapply(select_sensors, function(x){
+                attr_sdy <- tryCatch(
+                  retry_with_backoff({
+                attr_sdy <- unique(unlist(lapply(select_sensors, function(x){
                   movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = x)$short_name
                 })))
+                  }, check_var = "attr_sdy"),
+                error = function(e) {
+                  message("Failed to access Movebank: ", conditionMessage(e))
+                  NULL
+                }
+                )
+                arguments[["attributes"]] <- attr_sdy
               }
             }
           } else logger.info("You have selected to NOT use a fast reduction profile download. Start and end timestamps will be used if defined above.")
           
           if (length(animals)==0)
           {
-            anims <- movebank_download_deployment(study)$individual_local_identifier #is that always available??
-            logger.info(paste("no animals set, using full study with the following all animals:",paste(as.character(anims),collapse=", ")))
-            # arguments[["individual_local_identifier"]] <- NULL
+          logger.info("All individuals of this study have been selected to be downloaded")
           } else
           {
             logger.info(paste("selected to download",length(animals), "animals:", paste(as.character(animals),collapse=", ")))
@@ -152,8 +226,15 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           # else{
           
           #download
+          locs <- tryCatch(
+            retry_with_backoff({
           locs <- do.call(movebank_download_study,arguments)
-          
+            }, check_var = "locs"),
+          error = function(e) {
+            message("Failed to access Movebank: ", conditionMessage(e))
+            NULL
+          }
+          )
           # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
           if(!mt_is_track_id_cleaved(locs))
           {
@@ -196,6 +277,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
               locs <- mt_set_track_id(locs, "individual_local_identifier")
               # "deployment_id" moves to the event table, probably could somehow get it back to the track table, but not sure its worth the effort
+              if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
               if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
             }
           }
@@ -204,6 +286,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
               locs <- mt_set_track_id(locs, "deployment_id")
               locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+              if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
               if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
             }
           }
@@ -212,6 +295,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id))
             locs <- mt_set_track_id(locs, "individual_name_deployment_id")
             locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+            if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
             if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
           }
           
@@ -305,14 +389,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           
         }
         # }
-      },silent=TRUE)
-  }
-  
-  if(!exists("result"))
-  {
-    result <- NULL
-    logger.info(paste("Tried to access Movebank for 30 minutes, no successful response. Movebank seems to be currently down. Try again later. Returning NULL. Original error:", geterrmessage()))
-  }
+     
   
   if(!is.null(result)){
     ## create file with metadata for download
