@@ -212,41 +212,33 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             arguments[["individual_local_identifier"]] <- as.character(animals)
           }
           
-         #  ##check timestamp end and start to be within range of data
-         # if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
-         #   stdyi <- tryCatch(
-         #    retry_with_backoff({
-         #  stdyi <- movebank_download_study_info(study_id=study)
-         #    }, check_var = "stdyi"),
-         #  error = function(e) {
-         #    message("Failed to access Movebank: ", conditionMessage(e))
-         #    NULL
-         #  })
-         #   
-         #   print(paste("start setting: ",as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC")))
-         #  print(arguments$timestamp_start)
-         #   print(paste("end setting: ",as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC")))
-         #   print(paste("start data: ",stdyi$timestamp_first_deployed_location))
-         #   print(paste("end data: ",stdyi$timestamp_last_deployed_location))
-         #  logger.info(!is.null(arguments$timestamp_start))
-         #  logger.info( !is.null(arguments$timestamp_end))
-         #   
-         #   
-         #  if(!is.null(arguments$timestamp_start)){
-         #    if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
-         #      result <- NULL
-         #      logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
-         #    } 
-         #  }
-         #  if(!is.null(arguments$timestamp_end)){
-         #    if(as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
-         #    result <- NULL
-         #      logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
-         # 
-         #    }
-         #  }
-         # }#else{
-          
+          ##check timestamp end and start to be within range of data
+          if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
+            stdyi <- tryCatch(
+              retry_with_backoff({
+                stdyi <- movebank_download_study_info(study_id=study)
+              }, check_var = "stdyi"),
+              error = function(e) {
+                message("Failed to access Movebank: ", conditionMessage(e))
+                NULL
+              })
+            
+            if(!is.null(arguments$timestamp_start)){
+              if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
+                result <- NULL
+                logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
+              }
+            }
+            if(!is.null(arguments$timestamp_end)){
+              if(as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
+                result <- NULL
+                logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
+                
+              }
+            }
+          }
+          if(!exists("result")){
+            
           #download
           locs <- tryCatch(
             retry_with_backoff({
@@ -351,6 +343,21 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           # names(locs) <- make.names(names(locs),allow_=TRUE)
           mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
           
+          ## unlisting track data columns of class list
+          if(any(sapply(mt_track_data(locs), is_bare_list))){
+            ## reduce all columns were entry is the same to one (so no list anymore)
+            locs <- locs |> mutate_track_data(across(
+              where( ~is_bare_list(.x) && all(purrr::map_lgl(.x, function(y) 1==length(unique(y)) ))), 
+              ~do.call(vctrs::vec_c,purrr::map(.x, head,1))))
+            if(any(sapply(mt_track_data(locs), is_bare_list))){
+              ## transform those that are still a list into a character string
+              locs <- locs |> mutate_track_data(across(
+                where( ~is_bare_list(.x) && any(purrr::map_lgl(.x, function(y) 1!=length(unique(y)) ))), 
+                ~unlist(purrr::map(.x, paste, collapse=","))))
+            }
+          }
+          
+          
           # combine with other input data (move2!)
           if (!is.null(data)){
             if (!st_crs(data)==st_crs(locs)){
@@ -372,22 +379,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
                   ~unlist(purrr::map(.x, paste, collapse=","))))
               }
             }
-          }else{
-            result <- locs
-            ## unlisting track data columns of class list
-            if(any(sapply(mt_track_data(result), is_bare_list))){
-              ## reduce all columns were entry is the same to one (so no list anymore)
-              result <- result |> mutate_track_data(across(
-                where( ~is_bare_list(.x) && all(purrr::map_lgl(.x, function(y) 1==length(unique(y)) ))), 
-                ~do.call(vctrs::vec_c,purrr::map(.x, head,1))))
-              if(any(sapply(mt_track_data(result), is_bare_list))){
-                ## transform those that are still a list into a character string
-                result <- result |> mutate_track_data(across(
-                  where( ~is_bare_list(.x) && any(purrr::map_lgl(.x, function(y) 1!=length(unique(y)) ))), 
-                  ~unlist(purrr::map(.x, paste, collapse=","))))
-              }
-            }
-          }
+          }else{result <- locs}
+          
           
           ## remove all attributes that contain NAs in all rows
           na_cols <- result %>%
@@ -409,7 +402,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             select(where(~ !all(is.na(.)))) %>% 
             select_track_data(where(~ !all(is.na(.))))
           
-        # }
+        }
         }
      
   
