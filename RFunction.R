@@ -212,26 +212,40 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             arguments[["individual_local_identifier"]] <- as.character(animals)
           }
           
-          ##check timestamp end and start to be within range of data
-         if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
-           stdyi <- tryCatch(
-            retry_with_backoff({
-          stdyi <- movebank_download_study_info(study_id=study)
-            }, check_var = "stdyi"),
-          error = function(e) {
-            message("Failed to access Movebank: ", conditionMessage(e))
-            NULL
-          })
-               
-          if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
-              result <- NULL
-              logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
-          } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
-            result <- NULL
-              logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
-
-          }
-         }else{
+         #  ##check timestamp end and start to be within range of data
+         # if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
+         #   stdyi <- tryCatch(
+         #    retry_with_backoff({
+         #  stdyi <- movebank_download_study_info(study_id=study)
+         #    }, check_var = "stdyi"),
+         #  error = function(e) {
+         #    message("Failed to access Movebank: ", conditionMessage(e))
+         #    NULL
+         #  })
+         #   
+         #   print(paste("start setting: ",as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC")))
+         #  print(arguments$timestamp_start)
+         #   print(paste("end setting: ",as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC")))
+         #   print(paste("start data: ",stdyi$timestamp_first_deployed_location))
+         #   print(paste("end data: ",stdyi$timestamp_last_deployed_location))
+         #  logger.info(!is.null(arguments$timestamp_start))
+         #  logger.info( !is.null(arguments$timestamp_end))
+         #   
+         #   
+         #  if(!is.null(arguments$timestamp_start)){
+         #    if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
+         #      result <- NULL
+         #      logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
+         #    } 
+         #  }
+         #  if(!is.null(arguments$timestamp_end)){
+         #    if(as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
+         #    result <- NULL
+         #      logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
+         # 
+         #    }
+         #  }
+         # }#else{
           
           #download
           locs <- tryCatch(
@@ -395,7 +409,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             select(where(~ !all(is.na(.)))) %>% 
             select_track_data(where(~ !all(is.na(.))))
           
-        }
+        # }
         }
      
   
