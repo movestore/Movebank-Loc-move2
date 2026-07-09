@@ -221,14 +221,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             message("Failed to access Movebank: ", conditionMessage(e))
             NULL
           })
-          
-          logger.info(paste0("time start: ",arguments$timestamp_start ))
-          logger.info(paste0("time end: ",arguments$timestamp_end ))
-          logger.info(paste0("time start posix: ",as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC")))
-          logger.info(paste0("time end data: ", stdyi$timestamp_last_deployed_location))
-          logger.info(paste0("time start data: ", stdyi$timestamp_first_deployed_location))
-          
-          
+               
           if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
               result <- NULL
               logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
@@ -416,7 +409,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     }
   }
   
-  if(!is.null(result)){
+  if(is.null(result)){
     logger.error("No data has been downloaded, check your settings and the logs for messages that might indicate where the problem is.")
   } else {
     return(result)
