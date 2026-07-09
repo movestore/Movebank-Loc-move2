@@ -213,7 +213,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           }
           
           ##check timestamp end and start to be within range of data
-          stdyi <- tryCatch(
+         if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
+           stdyi <- tryCatch(
             retry_with_backoff({
           stdyi <- movebank_download_study_info(study_id=study)
             }, check_var = "stdyi"),
@@ -229,8 +230,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             result <- NULL
               logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
 
-              }
-          else{
+          }
+         }else{
           
           #download
           locs <- tryCatch(
