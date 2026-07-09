@@ -212,18 +212,24 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             arguments[["individual_local_identifier"]] <- as.character(animals)
           }
           
-          ## not working because of the while loop. Need to have better look at this
-          # ##check timestamp end and start to be within range of data
-          # stdyi <- movebank_download_study_info(study_id=study)
-          # if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
-          #     result <- NULL
-          #     logger.warn(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
-          # } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
-          #   result <- NULL
-          #     logger.warn(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
-          # 
-          #     }
-          # else{
+          ##check timestamp end and start to be within range of data
+          stdyi <- tryCatch(
+            retry_with_backoff({
+          stdyi <- movebank_download_study_info(study_id=study)
+            }, check_var = "stdyi"),
+          error = function(e) {
+            message("Failed to access Movebank: ", conditionMessage(e))
+            NULL
+          })
+          if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y-%m-%dT%H:%M:%OSZ", tz="UTC") > stdyi$timestamp_last_deployed_location){
+              result <- NULL
+              logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
+          } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y-%m-%dT%H:%M:%OSZ", tz="UTC") < stdyi$timestamp_first_deployed_location){
+            result <- NULL
+              logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
+
+              }
+          else{
           
           #download
           locs <- tryCatch(
@@ -388,7 +394,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             select_track_data(where(~ !all(is.na(.))))
           
         }
-        # }
+        }
      
   
   if(!is.null(result)){
