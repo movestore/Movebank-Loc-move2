@@ -224,15 +224,15 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           
           logger.info(paste0("time start: ",arguments$timestamp_start ))
           logger.info(paste0("time end: ",arguments$timestamp_end ))
-          logger.info(paste0("time start posix: ",as.POSIXct(arguments$timestamp_start, "%Y-%m-%dT%H:%M:%OSZ", tz="UTC")))
+          logger.info(paste0("time start posix: ",as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC")))
           logger.info(paste0("time end data: ", stdyi$timestamp_last_deployed_location))
           logger.info(paste0("time start data: ", stdyi$timestamp_first_deployed_location))
           
           
-          if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y-%m-%dT%H:%M:%OSZ", tz="UTC") > stdyi$timestamp_last_deployed_location){
+          if(!is.null(arguments$timestamp_start) & as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
               result <- NULL
               logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
-          } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y-%m-%dT%H:%M:%OSZ", tz="UTC") < stdyi$timestamp_first_deployed_location){
+          } else if(!is.null(arguments$timestamp_end) & as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
             result <- NULL
               logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
 

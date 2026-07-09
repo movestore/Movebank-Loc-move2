@@ -9,7 +9,7 @@
     "thin": false,
     "thin_numb": 1,
     "thin_unit": "week",
-    "timestamp_start": "2025-08-14T20:51:07Z",
+    "timestamp_start": "20250814205107000",
     "timestamp_end": null,
     "config_version": 0,
     "event_reduc": {},
