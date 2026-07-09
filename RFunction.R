@@ -408,5 +408,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     }
   }
   
-  return(result)
+  if(!is.null(result)){
+    logger.error("No data has been downloaded, check your settings and the logs for messages that might indicate where the problem is.")
+  } else {
+    return(result)
+  }
+  
 }
