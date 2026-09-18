@@ -3,7 +3,6 @@ library('keyring')
 library('lubridate')
 library("dplyr")
 library("sf")
-library("xml2")
 library("purrr")
 library("vctrs")
 library("rlang")
@@ -24,7 +23,9 @@ retry_with_backoff <- function(expr,
                                short_sleep = 60,        # sleep interval during short backoff phase
                                long_sleep = 300,        # sleep interval during long backoff phase
                                no_retry_classes = c("move2_error_no_data_found",   # error classes that signal a data/request problem,
-                                                    "move2_error_no_deployed_data"), # not downtime: give up immediately
+                                                    "move2_error_no_deployed_data", # not downtime: give up immediately
+                                                    "move2_error_movebank_construct_url_event_reductions_all"), # raised client-side by move2 before any request
+                               no_retry_pattern = "gets too long", # unclassed client-side move2 error (URL length limit)
                                envir = parent.frame()) {
   
   expr <- substitute(expr)
@@ -37,10 +38,10 @@ retry_with_backoff <- function(expr,
     if (!is.null(check_var)) exists(check_var, envir = envir, inherits = FALSE) else succeeded
   }
   
-  while (elapsed < timeout & !is_success()) {
+  while (elapsed < timeout && !is_success()) {
     
     # backoff schedule based on elapsed time
-    if (elapsed > initial_wait & elapsed <= short_backoff) Sys.sleep(short_sleep)
+    if (elapsed > initial_wait && elapsed <= short_backoff) Sys.sleep(short_sleep)
     if (elapsed > short_backoff) Sys.sleep(long_sleep)
     
     logger.info(paste0("Try ", label, " access at: ", Sys.time()))
@@ -49,7 +50,7 @@ retry_with_backoff <- function(expr,
       eval(expr, envir = envir)
       succeeded <- TRUE   # only reached if eval() didn't error
     }, error = function(e) {
-      if (inherits(e, no_retry_classes)) stop(e)  # rethrow unchanged so the caller can handle it
+      if (inherits(e, no_retry_classes) || grepl(no_retry_pattern, conditionMessage(e))) stop(e)  # rethrow unchanged so the caller can handle it
       last_error <<- conditionMessage(e)
     })
     
@@ -134,14 +135,14 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       logger.info("You have selected to only include the minimum set of event attributes: timestamp, track_id and the location. The track attributes will be fully included.")
     }
     
-    if (exists("timestamp_start") && !is.null(timestamp_start)) {
+    if (!is.null(timestamp_start)) {
       logger.info(paste0("timestamp_start is set and will be used: ", timestamp_start))
       arguments["timestamp_start"] = timestamp_start
     } else {
       logger.info("timestamp_start not set.")
     }
     
-    if (exists("timestamp_end") && !is.null(timestamp_end)) {
+    if (!is.null(timestamp_end)) {
       logger.info(paste0("timestamp_end is set and will be used: ", timestamp_end))
       arguments["timestamp_end"] = timestamp_end
     } else {
@@ -160,7 +161,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     # note: this setting does not seem to work at all (with or without timestamp_start/end), please ask Bart
     # NOTE ANNE: "EURING_01" and "EURING_03" work, but the attributes have to be named, attributes="all" does  not work, nor timestamp start/end. 
     
-    if (!is.null(event_reduc) & length(event_reduc)>0)
+    if (!is.null(event_reduc) && length(event_reduc)>0)
     {
       logger.info(paste("You have selected to use the event reduction profile",event_reduc,"for fast download from Movebank. EURING_01 indicates download of 1 location per day for the full selected tracks, EURING_03 download of the last 30 days of data for each selected individual track (starting at the last position)."))
       
@@ -219,7 +220,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     
     ##check timestamp end and start to be within range of data
     timewindow_ok <- TRUE
-    if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
+    if(!is.null(arguments$timestamp_start) || !is.null(arguments$timestamp_end)){
       stdyi <- tryCatch(
         retry_with_backoff({
           stdyi <- movebank_download_study_info(study_id=study)
@@ -270,7 +271,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           NULL
         },
         error = function(e) {
-          logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
+          logger.error(paste0("Download from Movebank failed: ", conditionMessage(e)))
           NULL
         }
       )
@@ -426,7 +427,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         select_track_data(where(~ all(is.na(.))))
       naevnt <- names(na_cols)
       natrk <- names(mt_track_data(na_cols))
-      naevnt <- naevnt[!naevnt %in% c(mt_track_id_column(result), mt_time_column(result),"geometry")]
+      naevnt <- naevnt[!naevnt %in% c(mt_track_id_column(result), mt_time_column(result), attr(result, "sf_column"))]
       natrk <- natrk[!natrk %in% c(mt_track_id_column(result))]
       
       if(length(naevnt)>=1){
@@ -448,15 +449,16 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     ## create file with metadata for download
     attrList <- c("study_id", "name", "taxon_ids", "principal_investigator_name", "contact_person_name", "citation", "license_terms", "license_type")
     metadata <- result %>% mt_track_data() %>% select(any_of(attrList)) %>% distinct(.keep_all = TRUE)
-    metadata$download_date <- Sys.Date()
-    metadata_csv <- data.frame(names(metadata),t(metadata))
     if(nrow(metadata)>=1){
-      write.table(metadata_csv,appArtifactPath("citation_metadata.csv"), row.names = F, col.names=F)
+      metadata$download_date <- Sys.Date()
+      metadata_csv <- data.frame(names(metadata), t(metadata))
+      write.table(metadata_csv, appArtifactPath("citation_metadata.csv"), sep = ",", qmethod = "double", row.names = FALSE, col.names = FALSE)
     }
   }
   
   if(is.null(result)){
     logger.error("No data has been downloaded, check your settings and the logs for messages that might indicate where the problem is.")
+    return(NULL)
   } else {
     return(result)
   }
