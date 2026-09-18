@@ -219,9 +219,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           stdyi <- movebank_download_study_info(study_id=study)
         }, check_var = "stdyi"),
         error = function(e) {
-          message("Failed to access Movebank: ", conditionMessage(e))
+          logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
           NULL
         })
+      if (is.null(stdyi)) return(NULL)  # Movebank unreachable; reason has been logged above
       
       if(!is.null(arguments$timestamp_start)){
         if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
