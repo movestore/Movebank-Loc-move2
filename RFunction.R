@@ -75,13 +75,17 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
   
   options("keyring_backend"="env")
   
-  tryCatch(
+  cred_ok <- tryCatch(
     retry_with_backoff({
       movebank_store_credentials(username,password)
     }, #label = "Movebank credential storage"
     ),
-    error = function(e) {message("Failed to access Movebank: ", conditionMessage(e))}
-  )    
+    error = function(e) {
+      logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
+      NULL
+    }
+  )
+  if (is.null(cred_ok)) return(NULL)  # Movebank unreachable; reason has been logged above
   
   arguments <- list()
   arguments[["study_id"]] <- study
@@ -104,10 +108,11 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       }, check_var = "sensorInfo"#, label = "Movebank"
       ),
       error = function(e) {
-        message("Failed to to access Movebank: ", conditionMessage(e))
+        logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
         NULL
       }
     )
+    if (is.null(sensorInfo)) return(NULL)  # Movebank unreachable; reason has been logged above
     
     select_sensors_name <- sensorInfo$name[which(as.numeric(sensorInfo$id) %in% select_sensors)]
     logger.info(paste("You have selected to download locations of these selected sensor types:",paste(select_sensors_name,collapse=", ")))
@@ -178,11 +183,11 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               attr_sdy <- movebank_retrieve(entity_type = "study_attribute", study_id = study, sensor_type_id = select_sensors)$short_name
             }, check_var = "attr_sdy"),
             error = function(e) {
-              message("Failed to access Movebank: ", conditionMessage(e))
+              logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
               NULL
             }
           )
-          
+          if (is.null(attr_sdy)) return(NULL)  # Movebank unreachable; reason has been logged above
           arguments[["attributes"]] <- attr_sdy
         }
         if(length(select_sensors)>1){
@@ -193,10 +198,11 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               })))
             }, check_var = "attr_sdy"),
             error = function(e) {
-              message("Failed to access Movebank: ", conditionMessage(e))
+              logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
               NULL
             }
           )
+          if (is.null(attr_sdy)) return(NULL)  # Movebank unreachable; reason has been logged above
           arguments[["attributes"]] <- attr_sdy
         }
       }
@@ -225,14 +231,14 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       if (is.null(stdyi)) return(NULL)  # Movebank unreachable; reason has been logged above
       
       if(!is.null(arguments$timestamp_start)){
-        if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
+        if(!is.na(stdyi$timestamp_last_deployed_location) && as.POSIXct(arguments$timestamp_start, format="%Y%m%d%H%M%S", tz="UTC") > stdyi$timestamp_last_deployed_location){
           result <- NULL
           timewindow_ok <- FALSE
           logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
         }
       }
       if(!is.null(arguments$timestamp_end)){
-        if(as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
+        if(!is.na(stdyi$timestamp_first_deployed_location) && as.POSIXct(arguments$timestamp_end, format="%Y%m%d%H%M%S", tz="UTC") < stdyi$timestamp_first_deployed_location){
           result <- NULL
           timewindow_ok <- FALSE
           logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
@@ -257,6 +263,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           } else {
             logger.error(paste0("No data are available for the selected animals and sensors. ", conditionMessage(e)))
           }
+          NULL
+        },
+        move2_error_no_deployed_data = function(e) {
+          logger.error(paste0("Data were downloaded but none of the records are deployed, i.e. assigned to an animal. No data will be downloaded. ", conditionMessage(e)))
           NULL
         },
         error = function(e) {
@@ -339,6 +349,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           mutate(n_na = rowSums(is.na(pick(everything())))) %>%
           arrange(n_na) %>%
           mt_filter_unique(criterion='first') %>% # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
+          dplyr::select(-n_na) %>% # helper column, must not end up in the output
           dplyr::arrange(mt_track_id()) %>%
           dplyr::arrange(mt_track_id(),mt_time())
       }
@@ -380,7 +391,18 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           locs <- st_transform(locs, st_crs(data))
           logger.info(paste0("The new data sets to combine has a different projection. It has been re-projected, and now the combined data set is in the '",st_crs(data)$input,"' projection."))
         }
-        result <- mt_stack(data,locs,.track_combine="rename") ## mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
+        result <- tryCatch(
+          mt_stack(data,locs,.track_combine="rename"), ## mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
+          error = function(e) { # move2 0.5.0 raises this without its intended class (typo in cli_abort), so catch any error
+            if (mt_track_id_column(data) != mt_track_id_column(locs)) {
+              logger.error(paste0("The downloaded data cannot be combined with the input data: the track ID column differs ('", mt_track_id_column(data), "' in the input data, '", mt_track_id_column(locs), "' in the downloaded data). Please select the same 'track ID' option in all Movebank Apps of this workflow."))
+            } else {
+              logger.error(paste0("The downloaded data cannot be combined with the input data: ", conditionMessage(e)))
+            }
+            NULL
+          }
+        )
+        if (is.null(result)) return(NULL)
         
         ## unlisting track data columns of class list
         if(any(sapply(mt_track_data(result), is_bare_list))){
