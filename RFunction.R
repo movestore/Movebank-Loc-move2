@@ -23,6 +23,8 @@ retry_with_backoff <- function(expr,
                                short_backoff = 600,     # seconds after which backoff switches to long interval
                                short_sleep = 60,        # sleep interval during short backoff phase
                                long_sleep = 300,        # sleep interval during long backoff phase
+                               no_retry_classes = c("move2_error_no_data_found",   # error classes that signal a data/request problem,
+                                                    "move2_error_no_deployed_data"), # not downtime: give up immediately
                                envir = parent.frame()) {
   
   expr <- substitute(expr)
@@ -47,6 +49,7 @@ retry_with_backoff <- function(expr,
       eval(expr, envir = envir)
       succeeded <- TRUE   # only reached if eval() didn't error
     }, error = function(e) {
+      if (inherits(e, no_retry_classes)) stop(e)  # rethrow unchanged so the caller can handle it
       last_error <<- conditionMessage(e)
     })
     
@@ -129,8 +132,6 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if (exists("timestamp_start") && !is.null(timestamp_start)) {
       logger.info(paste0("timestamp_start is set and will be used: ", timestamp_start))
       arguments["timestamp_start"] = timestamp_start
-      #arguments["timestamp_start"] = paste(substring(as.character(timestamp_start),c(1,6,9,12,15,18,21),c(4,7,10,13,16,19,23)),collapse="")
-      #arguments["timestamp_start"] = as.POSIXct(as.character(timestamp_start),format="%Y-%m-%dT%H:%M:%OSZ")
     } else {
       logger.info("timestamp_start not set.")
     }
@@ -138,8 +139,6 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if (exists("timestamp_end") && !is.null(timestamp_end)) {
       logger.info(paste0("timestamp_end is set and will be used: ", timestamp_end))
       arguments["timestamp_end"] = timestamp_end
-      #arguments["timestamp_end"] = paste(substring(as.character(timestamp_end),c(1,6,9,12,15,18,21),c(4,7,10,13,16,19,23)),collapse="")
-      #arguments["timestamp_end"] = as.POSIXct(as.character(timestamp_end),format="%Y-%m-%dT%H:%M:%OSZ")
     } else {
       logger.info("timestamp_end not set.")
     }
@@ -213,6 +212,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     }
     
     ##check timestamp end and start to be within range of data
+    timewindow_ok <- TRUE
     if(!is.null(arguments$timestamp_start) | !is.null(arguments$timestamp_end)){
       stdyi <- tryCatch(
         retry_with_backoff({
@@ -226,29 +226,44 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       if(!is.null(arguments$timestamp_start)){
         if(as.POSIXct(arguments$timestamp_start, "%Y%m%d%H%M%OS", tz="UTC") > stdyi$timestamp_last_deployed_location){
           result <- NULL
+          timewindow_ok <- FALSE
           logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
         }
       }
       if(!is.null(arguments$timestamp_end)){
         if(as.POSIXct(arguments$timestamp_end, "%Y%m%d%H%M%OS", tz="UTC") < stdyi$timestamp_first_deployed_location){
           result <- NULL
+          timewindow_ok <- FALSE
           logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
           
         }
       }
     }
-    if(!exists("result")){
+    if(timewindow_ok){
       
       #download
       locs <- tryCatch(
         retry_with_backoff({
           locs <- do.call(movebank_download_study,arguments)
         }, check_var = "locs"),
+        move2_error_no_data_found = function(e) {
+          if (!is.null(arguments$timestamp_start) || !is.null(arguments$timestamp_end)) {
+            logger.error(paste0("No data are available in the selected time range (start: ",
+                                if (is.null(arguments$timestamp_start)) "not set" else arguments$timestamp_start,
+                                ", end: ",
+                                if (is.null(arguments$timestamp_end)) "not set" else arguments$timestamp_end,
+                                ") for the selected animals and sensors. No data will be downloaded."))
+          } else {
+            logger.error(paste0("No data are available for the selected animals and sensors. ", conditionMessage(e)))
+          }
+          NULL
+        },
         error = function(e) {
-          message("Failed to access Movebank: ", conditionMessage(e))
+          logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
           NULL
         }
       )
+      if (is.null(locs)) return(NULL)  # nothing to process; the reason has been logged above
       # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
       if(!mt_is_track_id_cleaved(locs))
       {
