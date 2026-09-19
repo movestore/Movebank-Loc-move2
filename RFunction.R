@@ -132,7 +132,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     if (minarg==TRUE) 
     {
       arguments[["attributes"]] <- c("tag_local_identifier","individual_local_identifier","deployment_id","sensor_type_id")
-      logger.info("You have selected to only include the minimum set of event attributes: timestamp, track_id and the location. The track attributes will be fully included.")
+      logger.info("You have selected to only include the minimum set of event attributes: animal ID, tag ID, deployment ID, sensor type, timestamp and location. The track attributes will be fully included.")
     }
     
     if (!is.null(timestamp_start)) {
@@ -151,9 +151,9 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     
     if(!is.null(lastXdays)){
       timestamp_start <- now(tzone="UTC") - days(lastXdays)
-      arguments[["timestamp_start"]]  <-  timestamp_start ## why sometimes there are 2 square brackets and sometimes just one?
+      arguments[["timestamp_start"]]  <-  timestamp_start ## [[ is needed for POSIXct so its class survives, [ is fine for scalar/NULL
       arguments["timestamp_end"]  <-  NULL
-      logger.info(paste0("data will be downloaded starting from: ", timestamp_start, " this is ",lastXdays, " before now. If timestamp_start or timestamp_end are set, these values will be ignored"))
+      logger.info(paste0("data will be downloaded starting from: ", timestamp_start, ", this is ", lastXdays, " days before now. If timestamp_start or timestamp_end are set, these values will be ignored"))
     }
     
     #event reduction profiles EURING: 1-quick daily location, 3-all location of the last 30 days
@@ -256,10 +256,13 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         }, check_var = "locs"),
         move2_error_no_data_found = function(e) {
           if (!is.null(arguments$timestamp_start) || !is.null(arguments$timestamp_end)) {
-            logger.error(paste0("No data are available in the selected time range (start: ",
-                                if (is.null(arguments$timestamp_start)) "not set" else arguments$timestamp_start,
-                                ", end: ",
-                                if (is.null(arguments$timestamp_end)) "not set" else arguments$timestamp_end,
+            fmt_ts <- function(x) { # platform passes "yyyyMMddHHmmssSSS" strings, lastXdays a POSIXct
+              if (is.null(x)) return("not set")
+              if (is.character(x)) x <- as.POSIXct(x, format = "%Y%m%d%H%M%S", tz = "UTC")
+              format(x, "%Y-%m-%d %H:%M:%S UTC")
+            }
+            logger.error(paste0("No data are available in the selected time range (start: ", fmt_ts(arguments$timestamp_start),
+                                ", end: ", fmt_ts(arguments$timestamp_end),
                                 ") for the selected animals and sensors. No data will be downloaded."))
           } else {
             logger.error(paste0("No data are available for the selected animals and sensors. ", conditionMessage(e)))
@@ -369,7 +372,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       
       #make names
       # names(locs) <- make.names(names(locs),allow_=TRUE)
-      mt_track_id(locs) <- make.names(mt_track_id(locs),allow_=TRUE)
+      ids <- mt_track_id(locs); u <- unique(ids)
+      mt_track_id(locs) <- make.names(u, allow_ = TRUE, unique = TRUE)[match(ids, u)] # unique = TRUE: ids that differ only in non-syntactic characters must not be merged
       
       ## unlisting track data columns of class list
       if(any(sapply(mt_track_data(locs), is_bare_list))){
