@@ -86,18 +86,18 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       NULL
     }
   )
-  if (is.null(cred_ok)) return(NULL)  # Movebank unreachable; reason has been logged above
+  if (is.null(cred_ok)) stop("Movebank could not be reached to store the credentials. See the log messages above for details.", call. = FALSE)
   
   arguments <- list()
   arguments[["study_id"]] <- study
   #sensor types
   if (is.null(select_sensors))
   {
-    logger.info("The selected study does not contain any location sensor data. No data will be downloaded (NULL output) by this App.")
+    logger.info("The selected study does not contain any location sensor data. No data will be downloaded and the App stops with an error.")
     result <- NULL
   } else if (length(select_sensors)==0)
   {
-    logger.info("Either the selected study does not contain any location sensor data or you have deselected all available location sensors. No data will be downloaded (NULL output) by this App.")
+    logger.info("Either the selected study does not contain any location sensor data or you have deselected all available location sensors. No data will be downloaded and the App stops with an error.")
     result <- NULL
   } else #download if any sensor given
   {
@@ -113,7 +113,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         NULL
       }
     )
-    if (is.null(sensorInfo)) return(NULL)  # Movebank unreachable; reason has been logged above
+    if (is.null(sensorInfo)) stop("Movebank could not be reached to retrieve the sensor types. See the log messages above for details.", call. = FALSE)
     
     select_sensors_name <- sensorInfo$name[which(as.numeric(sensorInfo$id) %in% select_sensors)]
     logger.info(paste("You have selected to download locations of these selected sensor types:",paste(select_sensors_name,collapse=", ")))
@@ -189,7 +189,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               NULL
             }
           )
-          if (is.null(attr_sdy)) return(NULL)  # Movebank unreachable; reason has been logged above
+          if (is.null(attr_sdy)) stop("Movebank could not be reached to retrieve the study attributes. See the log messages above for details.", call. = FALSE)
           arguments[["attributes"]] <- attr_sdy
         }
         if(length(select_sensors)>1){
@@ -204,7 +204,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
               NULL
             }
           )
-          if (is.null(attr_sdy)) return(NULL)  # Movebank unreachable; reason has been logged above
+          if (is.null(attr_sdy)) stop("Movebank could not be reached to retrieve the study attributes. See the log messages above for details.", call. = FALSE)
           arguments[["attributes"]] <- attr_sdy
         }
       }
@@ -231,7 +231,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
           NULL
         })
-      if (is.null(stdyi)) return(NULL)  # Movebank unreachable; reason has been logged above
+      if (is.null(stdyi)) stop("Movebank could not be reached to retrieve the study information. See the log messages above for details.", call. = FALSE)
       
       if(!is.null(arguments$timestamp_start)){
         if(!is.na(stdyi$timestamp_last_deployed_location) && as.POSIXct(arguments$timestamp_start, format="%Y%m%d%H%M%S", tz="UTC") > stdyi$timestamp_last_deployed_location){
@@ -280,7 +280,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           NULL
         }
       )
-      if (is.null(locs)) return(NULL)  # nothing to process; the reason has been logged above
+      if (is.null(locs)) stop("No data have been downloaded from Movebank. See the log messages above for details.", call. = FALSE)
       # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
       if(!mt_is_track_id_cleaved(locs))
       {
@@ -415,7 +415,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
             NULL
           }
         )
-        if (is.null(result)) return(NULL)
+        if (is.null(result)) stop("The downloaded data could not be combined with the input data. See the log messages above for details.", call. = FALSE)
         
         ## unlisting track data columns of class list
         if(any(sapply(mt_track_data(result), is_bare_list))){
@@ -474,8 +474,9 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
   }
   
   if(is.null(result)){
-    logger.error("No data has been downloaded, check your settings and the logs for messages that might indicate where the problem is.")
-    return(NULL)
+    msg <- "No data has been downloaded, check your settings and the logs for messages that might indicate where the problem is."
+    logger.error(msg)
+    stop(msg, call. = FALSE)
   } else {
     return(result)
   }
