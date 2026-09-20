@@ -146,14 +146,15 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       logger.info(paste0("timestamp_end is set and will be used: ", timestamp_end))
       arguments["timestamp_end"] = timestamp_end
     } else {
-      logger.info("timestamp_end not set.")
+      arguments[["timestamp_end"]] <- now(tzone="UTC") # always set an end to prevent downloading locations with timestamps in the future
+      logger.info(paste0("timestamp_end not set. The current time (", format(arguments$timestamp_end, "%Y-%m-%d %H:%M:%S UTC"), ") is used as end timestamp to exclude locations with timestamps in the future."))
     }
     
     if(!is.null(lastXdays)){
       timestamp_start <- now(tzone="UTC") - days(lastXdays)
       arguments[["timestamp_start"]]  <-  timestamp_start ## [[ is needed for POSIXct so its class survives, [ is fine for scalar/NULL
-      arguments["timestamp_end"]  <-  NULL
-      logger.info(paste0("data will be downloaded starting from: ", timestamp_start, ", this is ", lastXdays, " days before now. If timestamp_start or timestamp_end are set, these values will be ignored"))
+      arguments[["timestamp_end"]]  <-  now(tzone="UTC")
+      logger.info(paste0("data will be downloaded starting from: ", timestamp_start, ", this is ", lastXdays, " days before now, until now. If timestamp_start or timestamp_end are set, these values will be ignored"))
     }
     
     #event reduction profiles EURING: 1-quick daily location, 3-all location of the last 30 days
@@ -172,9 +173,9 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         logger.info(paste0("timestamp_start cannot be used in combination with the setting ",event_reduc))
       }
       if(!is.null(timestamp_end)){
-        arguments["timestamp_end"] <- NULL
         logger.info(paste0("timestamp_end cannot be used in combination with the setting ",event_reduc))
       }
+      arguments["timestamp_end"] <- NULL # profiles do not accept timestamps, this also removes the default "now"
       
       # attributes=all does not work, a vector is needed
       if(!minarg){
@@ -220,7 +221,8 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     
     ##check timestamp end and start to be within range of data
     timewindow_ok <- TRUE
-    if(!is.null(arguments$timestamp_start) || !is.null(arguments$timestamp_end)){
+    user_end <- !is.null(timestamp_end) && !is.null(arguments$timestamp_end) # end timestamp set by the user (not the default "now") and still in use
+    if(!is.null(arguments$timestamp_start) || user_end){
       stdyi <- tryCatch(
         retry_with_backoff({
           stdyi <- movebank_download_study_info(study_id=study)
@@ -238,7 +240,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
         }
       }
-      if(!is.null(arguments$timestamp_end)){
+      if(user_end){
         if(!is.na(stdyi$timestamp_first_deployed_location) && as.POSIXct(arguments$timestamp_end, format="%Y%m%d%H%M%S", tz="UTC") < stdyi$timestamp_first_deployed_location){
           result <- NULL
           timewindow_ok <- FALSE
@@ -292,16 +294,21 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))
       }
       
+      n_downloaded <- nrow(locs) # counts for the summary at the end of the log
+      n_empty <- 0; n_nacoord <- 0; n_dupl_removed <- 0
       if(!mt_has_no_empty_points(locs))
       {
         emptylocs <- dplyr::filter(locs, sf::st_is_empty(locs))
-        logger.info(paste0("Your data included empty points (",nrow(emptylocs),"). We remove them for you."))
+        n_empty <- nrow(emptylocs)
+        logger.info(paste0("Your data included empty points (",n_empty,"). We remove them for you."))
         locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
       }
       ## for some reason, sometimes either lat or long are NA, as one still has a value it does not get removed with the excluding empty, here is what I came up with:
       crds <- sf::st_coordinates(locs)
       rem <- unique(c(which(is.na(crds[,1])),which(is.na(crds[,2]))))
       if(length(rem)>0){
+        n_nacoord <- length(rem)
+        logger.info(paste0("Your data included locations with missing latitude or longitude (",n_nacoord,"). We remove them for you."))
         locs <- locs[-rem,]
       }
       
@@ -348,6 +355,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       {
         n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
         logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
+        n_dupl_removed <- n_dupl
         ## this piece of code keeps the duplicated entry with least number of columns with NA values
         locs <- locs %>%
           mutate(n_na = rowSums(is.na(pick(everything())))) %>%
@@ -445,6 +453,11 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
         select(where(~ !all(is.na(.)))) %>% 
         select_track_data(where(~ !all(is.na(.))))
       
+      ## summary of locations excluded by the App
+      logger.info(paste0("Summary: ", n_downloaded, " locations downloaded from Movebank; excluded: ",
+                         n_empty, " empty points, ", n_nacoord, " with missing coordinates, ", n_dupl_removed, " duplicated timestamps",
+                         if (thin) paste0(", plus locations removed by thinning to one per ", thin_numb, " ", thin_unit) else "",
+                         "; ", nrow(locs), " locations returned", if (!is.null(data)) " (in addition to the input data)" else "", "."))
     }
   }
   
