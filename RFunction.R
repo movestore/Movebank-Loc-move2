@@ -119,7 +119,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     logger.info(paste("You have selected to download locations of these selected sensor types:",paste(select_sensors_name,collapse=", ")))
     
     #include outliers
-    if (incl_outliers==TRUE) 
+    if (isTRUE(incl_outliers)) 
     {
       logger.info ("Also locations marked as outliers in Movebank (visible=FALSE) will be downloaded. Note that this may lead to unexpected results.")
     } else 
@@ -129,7 +129,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
     }
     
     #todo: try out with study that has not tag_loc_id or id_loc_id
-    if (minarg==TRUE) 
+    if (isTRUE(minarg)) 
     {
       arguments[["attributes"]] <- c("tag_local_identifier","individual_local_identifier","deployment_id","sensor_type_id")
       logger.info("You have selected to only include the minimum set of event attributes: animal ID, tag ID, deployment ID, sensor type, timestamp and location. The track attributes will be fully included.")
@@ -232,6 +232,10 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
           NULL
         })
       if (is.null(stdyi)) stop("Movebank could not be reached to retrieve the study information. See the log messages above for details.", call. = FALSE)
+      if (nrow(stdyi) != 1) { # unexpected: no (or several) rows of study information, the time range cannot be checked
+        logger.warn(paste0("The study information could not be retrieved (", nrow(stdyi), " rows returned), the selected time range is not checked against the deployment period of the study."))
+        stdyi <- data.frame(timestamp_first_deployed_location = NA, timestamp_last_deployed_location = NA)
+      }
       
       if(!is.null(arguments$timestamp_start)){
         if(!is.na(stdyi$timestamp_last_deployed_location) && as.POSIXct(arguments$timestamp_start, format="%Y%m%d%H%M%S", tz="UTC") > stdyi$timestamp_last_deployed_location){
@@ -368,7 +372,7 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       
       #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
       # here was the error that tracks are not grouped
-      if (thin==TRUE) 
+      if (isTRUE(thin)) 
       {
         logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
         #order as suggested by error message (done by dplyr before, did not work???)
