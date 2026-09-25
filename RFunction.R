@@ -225,250 +225,213 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
       arguments[["individual_local_identifier"]] <- as.character(animals)
     }
     
-    ##check timestamp end and start to be within range of data
-    timewindow_ok <- TRUE
-    user_end <- !is.null(timestamp_end) && !is.null(arguments$timestamp_end) # end timestamp set by the user (not the default "now") and still in use
-    if(!is.null(arguments$timestamp_start) || user_end){
-      stdyi <- tryCatch(
-        retry_with_backoff({
-          stdyi <- movebank_download_study_info(study_id=study)
-        }, check_var = "stdyi"),
-        error = function(e) {
-          logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
-          NULL
-        })
-      if (is.null(stdyi)) stop("Movebank could not be reached to retrieve the study information. See the log messages above for details.", call. = FALSE)
-      if (nrow(stdyi) != 1) { # unexpected: no (or several) rows of study information, the time range cannot be checked
-        logger.warn(paste0("The study information could not be retrieved (", nrow(stdyi), " rows returned), the selected time range is not checked against the deployment period of the study."))
-        stdyi <- data.frame(timestamp_first_deployed_location = NA, timestamp_last_deployed_location = NA)
-      }
-      
-      if(!is.null(arguments$timestamp_start)){
-        if(!is.na(stdyi$timestamp_last_deployed_location) && as.POSIXct(arguments$timestamp_start, format="%Y%m%d%H%M%S", tz="UTC") > stdyi$timestamp_last_deployed_location){
-          result <- NULL
-          timewindow_ok <- FALSE
-          logger.error(paste0("Your start timestamp is set after the last deployed location of the study (",stdyi$timestamp_last_deployed_location,"). No data will be downloaded."))
+    #download
+    locs <- tryCatch(
+      retry_with_backoff({
+        locs <- do.call(movebank_download_study,arguments)
+      }, check_var = "locs"),
+      move2_error_no_data_found = function(e) {
+        fmt_ts <- function(x) { # platform passes "yyyyMMddHHmmssSSS" strings, lastXdays a POSIXct
+          if (is.character(x)) x <- as.POSIXct(x, format = "%Y%m%d%H%M%S", tz = "UTC")
+          format(x, "%Y-%m-%d %H:%M:%S UTC")
         }
+        ## only the timestamps set by the user are mentioned, the end timestamp defaults to "now"
+        start_set <- !is.null(arguments$timestamp_start)
+        end_set <- !is.null(timestamp_end) && !is.null(arguments$timestamp_end)
+        when <- if (start_set && end_set) paste0(" in the selected time range (start: ", fmt_ts(arguments$timestamp_start), ", end: ", fmt_ts(arguments$timestamp_end), ")")
+                else if (start_set) paste0(" from the selected start timestamp (", fmt_ts(arguments$timestamp_start), ") onwards")
+                else if (end_set) paste0(" up to the selected end timestamp (", fmt_ts(arguments$timestamp_end), ")")
+                else ""
+        logger.error(paste0("No data are available", when, " for the selected animals and sensors. No data will be downloaded. Please compare your selections with the first and last location dates shown in the Study or Animal Tabs."))
+        NULL
+      },
+      move2_error_no_deployed_data = function(e) {
+        logger.error(paste0("Data were downloaded but none of the records are deployed, i.e. assigned to an animal. No data will be downloaded. ", conditionMessage(e)))
+        NULL
+      },
+      error = function(e) {
+        logger.error(paste0("Download from Movebank failed: ", conditionMessage(e)))
+        NULL
       }
-      if(user_end){
-        if(!is.na(stdyi$timestamp_first_deployed_location) && as.POSIXct(arguments$timestamp_end, format="%Y%m%d%H%M%S", tz="UTC") < stdyi$timestamp_first_deployed_location){
-          result <- NULL
-          timewindow_ok <- FALSE
-          logger.error(paste0("Your end timestamp is set before the first deployment location of the study (",stdyi$timestamp_first_deployed_location,"). No data will be downloaded."))
-          
-        }
+    )
+    if (is.null(locs)) stop("No data have been downloaded from Movebank. See the log messages above for details.", call. = FALSE)
+    # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
+    if(!mt_is_track_id_cleaved(locs))
+    {
+      logger.info("Your data set was not grouped by individual/track. We regroup it for you.")
+      locs <- locs |> dplyr::arrange(mt_track_id(locs))
+    }
+    
+    if (!mt_is_time_ordered(locs))
+    {
+      logger.info("Your data is not time ordered (within the individual/track groups). We reorder the locations for you.")
+      locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))
+    }
+    
+    n_downloaded <- nrow(locs) # counts for the summary at the end of the log
+    n_empty <- 0; n_nacoord <- 0; n_dupl_removed <- 0
+    if(!mt_has_no_empty_points(locs))
+    {
+      emptylocs <- dplyr::filter(locs, sf::st_is_empty(locs))
+      n_empty <- nrow(emptylocs)
+      logger.info(paste0("Your data included empty points (",n_empty,"). We remove them for you."))
+      locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
+    }
+    ## for some reason, sometimes either lat or long are NA, as one still has a value it does not get removed with the excluding empty, here is what I came up with:
+    crds <- sf::st_coordinates(locs)
+    rem <- unique(c(which(is.na(crds[,1])),which(is.na(crds[,2]))))
+    if(length(rem)>0){
+      n_nacoord <- length(rem)
+      logger.info(paste0("Your data included locations with missing latitude or longitude (",n_nacoord,"). We remove them for you."))
+      locs <- locs[-rem,]
+    }
+    
+    
+    # ## AFTER DISCUSSING WITH SARAH AND OTHERS, WE HAVE DECIDED TO LET THE USER DECIDE WHICH SHOULD BE THEIR TRACK ID, INDIVIDUAL NAME, DEPLOYMENT ID, OR COMBI OF BOTH.
+    # # rename track_id column to always combination of individual+tag so it is consistent and informative across studies. Used same naming as in "mt_read()"
+    # # suggestion form Bart: maybe better use "animalName (dep_id:358594)" because it could happen that the same indiv gets tagged with the same tag in 2 different years. If using "indv_tag", tracks could get merged together that are actually different deployments
+    # # ToDo: decide on column name e.g. "individual_name_deployment_id" and renaming e.g. "indivName (deploy_id:084728)"
+    # locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ," (deploy_id:",mt_track_data(locs)$deployment_id,")")) # "deploy_id" or some other abbreviation that makes sense
+    # idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
+    # locs <- mt_as_event_attribute(locs,"individual_name_deployment_id")
+    # locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+    # locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+    
+    # trackid=c("indv","deploy","indv_deploy")
+    if(trackid=="indv"){ #  "individual_local_identifier"
+      if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
+        locs <- mt_set_track_id(locs, "individual_local_identifier")
+        # "deployment_id" moves to the event table, probably could somehow get it back to the track table, but not sure its worth the effort
+        if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
+        if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
       }
     }
-    if(timewindow_ok){
-      
-      #download
-      locs <- tryCatch(
-        retry_with_backoff({
-          locs <- do.call(movebank_download_study,arguments)
-        }, check_var = "locs"),
-        move2_error_no_data_found = function(e) {
-          if (!is.null(arguments$timestamp_start) || !is.null(arguments$timestamp_end)) {
-            fmt_ts <- function(x) { # platform passes "yyyyMMddHHmmssSSS" strings, lastXdays a POSIXct
-              if (is.null(x)) return("not set")
-              if (is.character(x)) x <- as.POSIXct(x, format = "%Y%m%d%H%M%S", tz = "UTC")
-              format(x, "%Y-%m-%d %H:%M:%S UTC")
-            }
-            logger.error(paste0("No data are available in the selected time range (start: ", fmt_ts(arguments$timestamp_start),
-                                ", end: ", fmt_ts(arguments$timestamp_end),
-                                ") for the selected animals and sensors. No data will be downloaded."))
-          } else {
-            logger.error(paste0("No data are available for the selected animals and sensors. ", conditionMessage(e)))
-          }
-          NULL
-        },
-        move2_error_no_deployed_data = function(e) {
-          logger.error(paste0("Data were downloaded but none of the records are deployed, i.e. assigned to an animal. No data will be downloaded. ", conditionMessage(e)))
-          NULL
-        },
-        error = function(e) {
-          logger.error(paste0("Download from Movebank failed: ", conditionMessage(e)))
-          NULL
-        }
-      )
-      if (is.null(locs)) stop("No data have been downloaded from Movebank. See the log messages above for details.", call. = FALSE)
-      # quality check: cleaved, time ordered, non-emtpy, non-duplicated (dupl get removed further down in the code)
-      if(!mt_is_track_id_cleaved(locs))
-      {
-        logger.info("Your data set was not grouped by individual/track. We regroup it for you.")
-        locs <- locs |> dplyr::arrange(mt_track_id(locs))
-      }
-      
-      if (!mt_is_time_ordered(locs))
-      {
-        logger.info("Your data is not time ordered (within the individual/track groups). We reorder the locations for you.")
-        locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))
-      }
-      
-      n_downloaded <- nrow(locs) # counts for the summary at the end of the log
-      n_empty <- 0; n_nacoord <- 0; n_dupl_removed <- 0
-      if(!mt_has_no_empty_points(locs))
-      {
-        emptylocs <- dplyr::filter(locs, sf::st_is_empty(locs))
-        n_empty <- nrow(emptylocs)
-        logger.info(paste0("Your data included empty points (",n_empty,"). We remove them for you."))
-        locs <- dplyr::filter(locs, !sf::st_is_empty(locs))
-      }
-      ## for some reason, sometimes either lat or long are NA, as one still has a value it does not get removed with the excluding empty, here is what I came up with:
-      crds <- sf::st_coordinates(locs)
-      rem <- unique(c(which(is.na(crds[,1])),which(is.na(crds[,2]))))
-      if(length(rem)>0){
-        n_nacoord <- length(rem)
-        logger.info(paste0("Your data included locations with missing latitude or longitude (",n_nacoord,"). We remove them for you."))
-        locs <- locs[-rem,]
-      }
-      
-      
-      # ## AFTER DISCUSSING WITH SARAH AND OTHERS, WE HAVE DECIDED TO LET THE USER DECIDE WHICH SHOULD BE THEIR TRACK ID, INDIVIDUAL NAME, DEPLOYMENT ID, OR COMBI OF BOTH.
-      # # rename track_id column to always combination of individual+tag so it is consistent and informative across studies. Used same naming as in "mt_read()"
-      # # suggestion form Bart: maybe better use "animalName (dep_id:358594)" because it could happen that the same indiv gets tagged with the same tag in 2 different years. If using "indv_tag", tracks could get merged together that are actually different deployments
-      # # ToDo: decide on column name e.g. "individual_name_deployment_id" and renaming e.g. "indivName (deploy_id:084728)"
-      # locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ," (deploy_id:",mt_track_data(locs)$deployment_id,")")) # "deploy_id" or some other abbreviation that makes sense
-      # idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
-      # locs <- mt_as_event_attribute(locs,"individual_name_deployment_id")
-      # locs <- mt_set_track_id(locs, "individual_name_deployment_id")
-      # locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
-      
-      # trackid=c("indv","deploy","indv_deploy")
-      if(trackid=="indv"){ #  "individual_local_identifier"
-        if(mt_track_id_column(locs)=="individual_local_identifier"){locs <- locs}else{
-          locs <- mt_set_track_id(locs, "individual_local_identifier")
-          # "deployment_id" moves to the event table, probably could somehow get it back to the track table, but not sure its worth the effort
-          if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
-          if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
-        }
-      }
-      if(trackid=="deploy"){ #deployment_id
-        if(mt_track_id_column(locs)=="deployment_id"){locs <- locs}else{
-          idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
-          locs <- mt_set_track_id(locs, "deployment_id")
-          locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
-          if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
-          if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
-        }
-      }
-      if(trackid=="indv_deploy"){
+    if(trackid=="deploy"){ #deployment_id
+      if(mt_track_id_column(locs)=="deployment_id"){locs <- locs}else{
         idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
-        locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id))
-        locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+        locs <- mt_set_track_id(locs, "deployment_id")
         locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
         if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
         if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
       }
-      
-      # remove duplicates without user interaction, start with select most-info row
-      if (!mt_has_unique_location_time_records(locs))
-      {
-        n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
-        logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
-        n_dupl_removed <- n_dupl
-        ## this piece of code keeps the duplicated entry with least number of columns with NA values
-        locs <- locs %>%
-          mutate(n_na = rowSums(is.na(pick(everything())))) %>%
-          arrange(n_na) %>%
-          mt_filter_unique(criterion='first') %>% # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
-          dplyr::select(-n_na) %>% # helper column, must not end up in the output
-          dplyr::arrange(mt_track_id()) %>%
-          dplyr::arrange(mt_track_id(),mt_time())
+    }
+    if(trackid=="indv_deploy"){
+      idcolumn <- mt_track_id_column(locs) # need to get track id column before changing it
+      locs <- locs |> mutate_track_data(individual_name_deployment_id = paste0(mt_track_data(locs)$individual_local_identifier ,"_",mt_track_data(locs)$deployment_id))
+      locs <- mt_set_track_id(locs, "individual_name_deployment_id")
+      locs <- mt_as_track_attribute(locs,all_of(idcolumn)) # when changing the track_id column, the previous one stays in the event table, but gets removed from track table (which makes sense), but putting it back as in this case it will always work
+      if(!mt_is_track_id_cleaved(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs))}
+      if(!mt_is_time_ordered(locs)){locs <- locs |> dplyr::arrange(mt_track_id(locs),mt_time(locs))}
+    }
+    
+    # remove duplicates without user interaction, start with select most-info row
+    if (!mt_has_unique_location_time_records(locs))
+    {
+      n_dupl <- length(which(duplicated(paste(mt_track_id(locs),mt_time(locs)))))
+      logger.info(paste("Your data has",n_dupl, "duplicated location-time records. We removed here those with less info and then select the first if still duplicated."))
+      n_dupl_removed <- n_dupl
+      ## this piece of code keeps the duplicated entry with least number of columns with NA values
+      locs <- locs %>%
+        mutate(n_na = rowSums(is.na(pick(everything())))) %>%
+        arrange(n_na) %>%
+        mt_filter_unique(criterion='first') %>% # this always needs to be "first" because the duplicates get ordered according to the number of columns with NA. 
+        dplyr::select(-n_na) %>% # helper column, must not end up in the output
+        dplyr::arrange(mt_track_id()) %>%
+        dplyr::arrange(mt_track_id(),mt_time())
+    }
+    
+    #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
+    # here was the error that tracks are not grouped
+    if (isTRUE(thin)) 
+    {
+      logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
+      #order as suggested by error message (done by dplyr before, did not work???)
+      locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
+      locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
+      locs <- locs %>% group_by(mt_track_id()) %>% slice(if(n()>1) -1 else 1) %>% ungroup ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it. If track endsup only with one location, this one is retained
+      locs <-  locs %>% select (-c(`mt_track_id()`)) # this column gets added when using group_by()
+    } 
+    
+    #make names
+    # names(locs) <- make.names(names(locs),allow_=TRUE)
+    ids <- mt_track_id(locs); u <- unique(ids)
+    mt_track_id(locs) <- make.names(u, allow_ = TRUE, unique = TRUE)[match(ids, u)] # unique = TRUE: ids that differ only in non-syntactic characters must not be merged
+    
+    ## unlisting track data columns of class list
+    if(any(sapply(mt_track_data(locs), is_bare_list))){
+      ## reduce all columns were entry is the same to one (so no list anymore)
+      locs <- locs |> mutate_track_data(across(
+        where( ~is_bare_list(.x) && all(purrr::map_lgl(.x, function(y) 1==length(unique(y)) ))), 
+        ~do.call(vctrs::vec_c,purrr::map(.x, head,1))))
+      if(any(sapply(mt_track_data(locs), is_bare_list))){
+        ## transform those that are still a list into a character string
+        locs <- locs |> mutate_track_data(across(
+          where( ~is_bare_list(.x) && any(purrr::map_lgl(.x, function(y) 1!=length(unique(y)) ))), 
+          ~unlist(purrr::map(.x, paste, collapse=","))))
       }
-      
-      #thinning to first location of given time windows (thus, resulting time lag can be shorter some times)
-      # here was the error that tracks are not grouped
-      if (isTRUE(thin)) 
-      {
-        logger.info(paste("Your data will be thinned as requested to one location per",thin_numb,thin_unit))
-        #order as suggested by error message (done by dplyr before, did not work???)
-        locs <- locs[order(mt_track_id(locs),mt_time(locs)),]
-        locs <- mt_filter_per_interval(locs,criterion="first",unit=paste(thin_numb,thin_unit))
-        locs <- locs %>% group_by(mt_track_id()) %>% slice(if(n()>1) -1 else 1) %>% ungroup ## the thinning happens within the time window, so the 1st location is mostly off. After the 1st location the intervals are regular if the data allow for it. If track endsup only with one location, this one is retained
-        locs <-  locs %>% select (-c(`mt_track_id()`)) # this column gets added when using group_by()
-      } 
-      
-      #make names
-      # names(locs) <- make.names(names(locs),allow_=TRUE)
-      ids <- mt_track_id(locs); u <- unique(ids)
-      mt_track_id(locs) <- make.names(u, allow_ = TRUE, unique = TRUE)[match(ids, u)] # unique = TRUE: ids that differ only in non-syntactic characters must not be merged
+    }
+    
+    
+    # combine with other input data (move2!)
+    if (!is.null(data)){
+      if (!st_crs(data)==st_crs(locs)){
+        locs <- st_transform(locs, st_crs(data))
+        logger.info(paste0("The new data sets to combine has a different projection. It has been re-projected, and now the combined data set is in the '",st_crs(data)$input,"' projection."))
+      }
+      result <- tryCatch(
+        mt_stack(data,locs,.track_combine="rename"), ## mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
+        error = function(e) { # move2 0.5.0 raises this without its intended class (typo in cli_abort), so catch any error
+          if (mt_track_id_column(data) != mt_track_id_column(locs)) {
+            logger.error(paste0("The downloaded data cannot be combined with the input data: the track ID column differs ('", mt_track_id_column(data), "' in the input data, '", mt_track_id_column(locs), "' in the downloaded data). Please select the same 'track ID' option in all Movebank Apps of this workflow."))
+          } else {
+            logger.error(paste0("The downloaded data cannot be combined with the input data: ", conditionMessage(e)))
+          }
+          NULL
+        }
+      )
+      if (is.null(result)) stop("The downloaded data could not be combined with the input data. See the log messages above for details.", call. = FALSE)
       
       ## unlisting track data columns of class list
-      if(any(sapply(mt_track_data(locs), is_bare_list))){
+      if(any(sapply(mt_track_data(result), is_bare_list))){
         ## reduce all columns were entry is the same to one (so no list anymore)
-        locs <- locs |> mutate_track_data(across(
+        result <- result |> mutate_track_data(across(
           where( ~is_bare_list(.x) && all(purrr::map_lgl(.x, function(y) 1==length(unique(y)) ))), 
           ~do.call(vctrs::vec_c,purrr::map(.x, head,1))))
-        if(any(sapply(mt_track_data(locs), is_bare_list))){
+        if(any(sapply(mt_track_data(result), is_bare_list))){
           ## transform those that are still a list into a character string
-          locs <- locs |> mutate_track_data(across(
+          result <- result |> mutate_track_data(across(
             where( ~is_bare_list(.x) && any(purrr::map_lgl(.x, function(y) 1!=length(unique(y)) ))), 
             ~unlist(purrr::map(.x, paste, collapse=","))))
         }
       }
-      
-      
-      # combine with other input data (move2!)
-      if (!is.null(data)){
-        if (!st_crs(data)==st_crs(locs)){
-          locs <- st_transform(locs, st_crs(data))
-          logger.info(paste0("The new data sets to combine has a different projection. It has been re-projected, and now the combined data set is in the '",st_crs(data)$input,"' projection."))
-        }
-        result <- tryCatch(
-          mt_stack(data,locs,.track_combine="rename"), ## mt_stack(...,track_combine="rename") #check if only renamed at duplication; read about and test track_id_repair
-          error = function(e) { # move2 0.5.0 raises this without its intended class (typo in cli_abort), so catch any error
-            if (mt_track_id_column(data) != mt_track_id_column(locs)) {
-              logger.error(paste0("The downloaded data cannot be combined with the input data: the track ID column differs ('", mt_track_id_column(data), "' in the input data, '", mt_track_id_column(locs), "' in the downloaded data). Please select the same 'track ID' option in all Movebank Apps of this workflow."))
-            } else {
-              logger.error(paste0("The downloaded data cannot be combined with the input data: ", conditionMessage(e)))
-            }
-            NULL
-          }
-        )
-        if (is.null(result)) stop("The downloaded data could not be combined with the input data. See the log messages above for details.", call. = FALSE)
-        
-        ## unlisting track data columns of class list
-        if(any(sapply(mt_track_data(result), is_bare_list))){
-          ## reduce all columns were entry is the same to one (so no list anymore)
-          result <- result |> mutate_track_data(across(
-            where( ~is_bare_list(.x) && all(purrr::map_lgl(.x, function(y) 1==length(unique(y)) ))), 
-            ~do.call(vctrs::vec_c,purrr::map(.x, head,1))))
-          if(any(sapply(mt_track_data(result), is_bare_list))){
-            ## transform those that are still a list into a character string
-            result <- result |> mutate_track_data(across(
-              where( ~is_bare_list(.x) && any(purrr::map_lgl(.x, function(y) 1!=length(unique(y)) ))), 
-              ~unlist(purrr::map(.x, paste, collapse=","))))
-          }
-        }
-      }else{result <- locs}
-      
-      
-      ## remove all attributes that contain NAs in all rows
-      na_cols <- result %>%
-        select(where(~ all(is.na(.)))) %>% 
-        select_track_data(where(~ all(is.na(.))))
-      naevnt <- names(na_cols)
-      natrk <- names(mt_track_data(na_cols))
-      naevnt <- naevnt[!naevnt %in% c(mt_track_id_column(result), mt_time_column(result), attr(result, "sf_column"))]
-      natrk <- natrk[!natrk %in% c(mt_track_id_column(result))]
-      
-      if(length(naevnt)>=1){
-        logger.info(paste0("The event attributes: ",paste0(naevnt, collapse = ", ")," have been removed as they only contained NAs.")) 
-      }
-      if(length(natrk)>=1){
-        logger.info(paste0("The track attributes: ",paste0(natrk, collapse = ", ")," have been removed as they only contained NAs.")) 
-      }
-      
-      result <- result %>%
-        select(where(~ !all(is.na(.)))) %>% 
-        select_track_data(where(~ !all(is.na(.))))
-      
-      ## summary of locations excluded by the App
-      logger.info(paste0("Summary: ", n_downloaded, " locations downloaded from Movebank; excluded: ",
-                         n_empty, " empty points, ", n_nacoord, " with missing coordinates, ", n_dupl_removed, " duplicated timestamps",
-                         if (thin) paste0(", plus locations removed by thinning to one per ", thin_numb, " ", thin_unit) else "",
-                         "; ", nrow(locs), " locations returned", if (!is.null(data)) " (in addition to the input data)" else "", "."))
+    }else{result <- locs}
+    
+    
+    ## remove all attributes that contain NAs in all rows
+    na_cols <- result %>%
+      select(where(~ all(is.na(.)))) %>% 
+      select_track_data(where(~ all(is.na(.))))
+    naevnt <- names(na_cols)
+    natrk <- names(mt_track_data(na_cols))
+    naevnt <- naevnt[!naevnt %in% c(mt_track_id_column(result), mt_time_column(result), attr(result, "sf_column"))]
+    natrk <- natrk[!natrk %in% c(mt_track_id_column(result))]
+    
+    if(length(naevnt)>=1){
+      logger.info(paste0("The event attributes: ",paste0(naevnt, collapse = ", ")," have been removed as they only contained NAs.")) 
     }
+    if(length(natrk)>=1){
+      logger.info(paste0("The track attributes: ",paste0(natrk, collapse = ", ")," have been removed as they only contained NAs.")) 
+    }
+    
+    result <- result %>%
+      select(where(~ !all(is.na(.)))) %>% 
+      select_track_data(where(~ !all(is.na(.))))
+    
+    ## summary of locations excluded by the App
+    logger.info(paste0("Summary: ", n_downloaded, " locations downloaded from Movebank; excluded: ",
+                       n_empty, " empty points, ", n_nacoord, " with missing coordinates, ", n_dupl_removed, " duplicated timestamps",
+                       if (thin) paste0(", plus locations removed by thinning to one per ", thin_numb, " ", thin_unit) else "",
+                       "; ", nrow(locs), " locations returned", if (!is.null(data)) " (in addition to the input data)" else "", "."))
   }
   
   
