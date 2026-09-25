@@ -24,8 +24,9 @@ retry_with_backoff <- function(expr,
                                long_sleep = 300,        # sleep interval during long backoff phase
                                no_retry_classes = c("move2_error_no_data_found",   # error classes that signal a data/request problem,
                                                     "move2_error_no_deployed_data", # not downtime: give up immediately
+                                                    "move2_error_movebank_api_401_no_valid_credentials", # wrong username/password
                                                     "move2_error_movebank_construct_url_event_reductions_all"), # raised client-side by move2 before any request
-                               no_retry_pattern = "gets too long", # unclassed client-side move2 error (URL length limit)
+                               no_retry_pattern = "gets\\s+too\\s+long", # unclassed client-side move2 error (URL length limit); cli may wrap the message, hence \\s+
                                envir = parent.frame()) {
   
   expr <- substitute(expr)
@@ -78,15 +79,20 @@ rFunction = function(data=NULL, username,password,study,select_sensors,incl_outl
   
   cred_ok <- tryCatch(
     retry_with_backoff({
-      movebank_store_credentials(username,password)
-    }, #label = "Movebank credential storage"
-    ),
+      movebank_retrieve(entity_type = "tag_type", handle = movebank_handle(username, password = password))
+      movebank_store_credentials(username, password, force = TRUE) # force: the test query above has already been done
+      cred_ok <- TRUE
+    }, check_var = "cred_ok"),
+    move2_error_movebank_api_401_no_valid_credentials = function(e) {
+      logger.error("Your Movebank username and/or password are not valid (Movebank rejected them with 'no valid credentials'). Please correct the Movebank Login in your MoveApps user account profile.")
+      NULL
+    },
     error = function(e) {
       logger.error(paste0("Failed to access Movebank: ", conditionMessage(e)))
       NULL
     }
   )
-  if (is.null(cred_ok)) stop("Movebank could not be reached to store the credentials. See the log messages above for details.", call. = FALSE)
+  if (is.null(cred_ok)) stop("The Movebank credentials could not be verified. See the log messages above for details.", call. = FALSE)
   
   arguments <- list()
   arguments[["study_id"]] <- study
